@@ -1,0 +1,368 @@
+# 03 — Frontend
+
+The React app in `client/`. It talks only to the API in `02-backend.md` (and directly to Cloudinary for uploads).
+The approved prototype is the visual reference for every screen: `prototype/index.html`
+(published at https://claude.ai/artifact/1VpiD9w8AbgZQNMJsteY9y).
+
+---
+
+## 1. Stack
+
+| Concern | Choice |
+|---|---|
+| Build | Vite |
+| UI library | React 19 + TypeScript (strict) |
+| Routing | React Router (declarative routes) |
+| Server state | TanStack Query v5 (queries, infinite queries, mutations) |
+| Client state | Zustand (auth token, outfit builder, closet filters) |
+| HTTP | Axios with interceptors |
+| Validation | Zod (forms and API response parsing where useful) |
+| Forms | react-hook-form + `@hookform/resolvers/zod` |
+| Components | shadcn/ui (Radix-based, copied into the repo) + Tailwind CSS |
+| Icons | lucide-react |
+| Toasts | sonner (shadcn's toast) |
+| Font | Inter (Google Fonts), fallback `system-ui` |
+| Background removal | `@imgly/background-removal` (AGPL — fine, repo is public). Confirmed by the test in §9.1 |
+| PWA | `vite-plugin-pwa`: **installable only** (no offline data) |
+
+---
+
+## 2. Folder structure (by feature)
+
+```
+client/
+├── public/
+│   ├── categories/               fixed tab images: all.webp, top.webp, bottom.webp, shoes.webp, accessory.webp
+│   │                             (real product photos supplied by the owner)
+│   └── icons/                    PWA icons 192/512 + maskable
+├── src/
+│   ├── main.tsx                  React root, QueryClientProvider, RouterProvider, Toaster
+│   ├── app/
+│   │   ├── router.tsx            all routes (§3)
+│   │   ├── query-client.ts       TanStack Query defaults
+│   │   └── layouts/
+│   │       ├── AppLayout.tsx     page + bottom nav
+│   │       ├── AuthLayout.tsx    centred card for login/signup
+│   │       └── ProtectedRoute.tsx
+│   ├── lib/
+│   │   ├── api.ts                Axios instance + interceptors (§5)
+│   │   ├── api-types.ts          envelope + error types, error code union
+│   │   ├── errors.ts             error code → user message helpers
+│   │   ├── cloudinary.ts         signed direct upload with progress
+│   │   ├── image.ts              resize/compress to WebP, transparency check
+│   │   ├── color-detect.ts       nearest-palette colour detection (ported from the prototype)
+│   │   └── utils.ts              cn() etc. (shadcn)
+│   ├── components/
+│   │   ├── ui/                   shadcn components (button, sheet, dialog, input, switch, select, tabs…)
+│   │   ├── BottomNav.tsx
+│   │   ├── PageHeader.tsx        title left, action button right (the agreed header pattern)
+│   │   ├── ItemCard.tsx          photo + heart
+│   │   ├── ItemGrid.tsx          infinite-scroll grid
+│   │   ├── OutfitFigure.tsx      stacked top/bottom/shoes + accessory circles
+│   │   ├── EmptyState.tsx
+│   │   ├── ConfirmDialog.tsx
+│   │   └── InfiniteSentinel.tsx  loads the next page when scrolled into view
+│   ├── features/
+│   │   ├── auth/                 LoginPage, SignupPage, auth.api.ts, auth.store.ts, schemas.ts
+│   │   ├── profile/              ProfileHeader (cover card, avatar, icons, stats), me.api.ts
+│   │   ├── closet/               ClosetPage (Home), CategoryTabs, FilterSheet, ItemDetailSheet, items.api.ts, filters.store.ts
+│   │   ├── upload/               UploadFlow (category → photo → preview → save), useBackgroundRemoval.ts
+│   │   ├── subcategories/        SubcategoryPicker, ManageSubcategories, subcategories.api.ts
+│   │   ├── outfits/              OutfitsPage, OutfitDetailSheet, outfits.api.ts
+│   │   ├── builder/              BuilderPage, BuilderRow, AccessoriesSheet, builder.store.ts
+│   │   ├── looks/                LookbooksPage, AddLookFlow, LookDetailSheet, TagPicker, looks.api.ts
+│   │   ├── wishlist/             WishlistPage, AddLinkForm, wishlist.api.ts
+│   │   ├── liked/                LikedPage (Clothes | Outfits)
+│   │   ├── stats/                StatsPage, ColorDonut, Bars, stats.api.ts
+│   │   ├── weather/              WeatherPill, WeatherCard, useWeather.ts
+│   │   └── settings/             SettingsPage, AccentPicker, WeatherSettings, DeleteAccountDialog
+│   ├── styles/
+│   │   └── globals.css           Tailwind + CSS variables (§7)
+│   └── vite-env.d.ts
+├── index.html
+├── vite.config.ts                React + PWA plugins, `@` alias to src
+├── components.json               shadcn config
+├── .env.example                  VITE_API_URL=http://localhost:4000/api/v1
+└── tsconfig.json
+```
+
+Rules:
+- A feature folder owns its pages, components, `*.api.ts` (query/mutation hooks) and stores.
+- Features may import from `components/`, `lib/` and other features' **api hooks**, never another feature's internals.
+- All server calls go through `lib/api.ts`. Components never call Axios directly; they use the feature's hooks.
+
+---
+
+## 3. Routes
+
+| Path | Page | Access | Bottom nav |
+|---|---|---|---|
+| `/login` | LoginPage | public (logged-in → `/`) | no |
+| `/signup` | SignupPage | public (logged-in → `/`) | no |
+| `/` | ClosetPage (Home: profile header + tabs + grid) | protected | Home |
+| `/outfits` | OutfitsPage (weather card + grid) | protected | Outfits |
+| `/outfits/new` | BuilderPage | protected | hidden (full screen) |
+| `/outfits/:id/edit` | BuilderPage (pre-selected) | protected | hidden |
+| `/liked` | LikedPage (Clothes \| Outfits switch) | protected | Liked |
+| `/wishlist` | WishlistPage | protected | Wishlist |
+| `/lookbooks` | LookbooksPage | protected | — (from header icon) |
+| `/stats` | StatsPage | protected | — (from header icon) |
+| `/settings` | SettingsPage | protected | — (from header icon) |
+| `*` | redirect to `/` | | |
+
+- Item details, outfit details, look details, the filter sheet, the upload flow and confirmations are **sheets/dialogs**, not routes.
+- The bottom nav's centre **+** opens a sheet: Upload clothes · Create outfit · Add to wishlist.
+- Sub-pages (`/lookbooks`, `/stats`, `/settings`) show a back arrow in `PageHeader`.
+
+---
+
+## 4. State
+
+### 4.1 Server state: TanStack Query
+
+Query keys:
+
+| Key | Endpoint | Type |
+|---|---|---|
+| `['me']` | `GET /me` | query |
+| `['categories']`, `['colors']` | lookups | query, `staleTime: Infinity` |
+| `['subcategories']` | `GET /subcategories` | query |
+| `['items', filters]` | `GET /items` | **infinite** query |
+| `['item', id]` | `GET /items/:id` | query |
+| `['outfits', { favourite }]` | `GET /outfits` | infinite query |
+| `['outfit', id]` | `GET /outfits/:id` | query |
+| `['looks']`, `['look', id]` | looks | infinite / query |
+| `['wishlist']` | `GET /wishlist` | infinite query |
+| `['stats', category]` | `GET /stats` | query |
+| `['weather', lat, lon]` | `GET /weather` | query, `staleTime: 15 min` |
+
+- Infinite queries: `initialPageParam: undefined`, `getNextPageParam: last => last.meta.nextCursor ?? undefined`.
+  `InfiniteSentinel` (IntersectionObserver) calls `fetchNextPage()`.
+- Defaults: `staleTime: 30 s`, `retry: 1` (never retry 4xx), `refetchOnWindowFocus: true`.
+- **Optimistic updates** for the hearts (item `isLiked`, outfit `isFavourite`): update the cache, roll back on error.
+- After any create/update/delete, invalidate the affected keys plus `['me']` (counts) and `['stats']`.
+
+### 4.2 Client state: Zustand
+
+| Store | Holds | Persisted |
+|---|---|---|
+| `auth.store` | `accessToken`, `status: 'unknown' \| 'authed' \| 'guest'` | **No.** Memory only (the refresh cookie restores it) |
+| `filters.store` | closet tab, subcategory/colour filters, liked, unused, sort | No |
+| `builder.store` | current index per row, locks, subcategory per row, edit target, picked accessories | No |
+
+---
+
+## 5. API client and auth flow (`lib/api.ts`)
+
+- `axios.create({ baseURL: import.meta.env.VITE_API_URL, withCredentials: true })`. Cookies are needed for `/auth/refresh`.
+- **Request interceptor:** adds `Authorization: Bearer <accessToken>` if present.
+- **Response interceptor:**
+  - Success: returns `response.data` (the envelope). Hooks read `.data` and `.meta`.
+  - `401 TOKEN_EXPIRED`: call `POST /auth/refresh` **once** (single-flight: concurrent 401s wait for the same refresh), store the new token, retry the original request once.
+  - `401 SESSION_EXPIRED` / `UNAUTHENTICATED` after a refresh attempt: clear the auth store and the query cache, then navigate to `/login`.
+  - Other errors: reject with a typed `ApiError { status, code, message, details }`.
+- **App start:** `ProtectedRoute` shows a full-screen loader while `status === 'unknown'`, calls `/auth/refresh`, then sets `authed` or `guest`.
+- **Logout:** `POST /auth/logout`, then clear the store and cache, then go to `/login`.
+
+---
+
+## 6. Screens (behaviour)
+
+The prototype is the visual reference. These are the rules to keep.
+
+### 6.1 Login / Signup
+- Signup: name, username (3–24, `a–z 0–9 _ .`), email, password (8–72). Zod in the form, matching the server rules.
+- Server errors `EMAIL_TAKEN` / `USERNAME_TAKEN` show under the matching field.
+
+### 6.2 Home (closet)
+- **Profile header:**
+  - Rounded cover card with the **weather pill** (icon + temperature only) top-left.
+  - White name card overlapping the bottom of the cover.
+  - Avatar overlapping both cover and card, top-left.
+  - Three **icon-only** round buttons overlapping the same edge on the right: Lookbooks, Wardrobe stats, Settings.
+  - Name, @username, and 5 tappable counts: items, outfits, looks, liked, wishlist.
+  - No edit button. Profile editing is in Settings.
+- **Category tabs:** circles with **fixed images** from `public/categories/` and labels: All, Tops, Bottoms, Shoes, Accessories. The row has side padding so the active ring isn't clipped.
+- **Grid:** cards show **photo + heart only**. Infinite scroll. Tap → ItemDetailSheet.
+- **Filter button** next to the count ("23 items · Filter (2)"). Filter sheet: subcategory, colour, liked only, not in any outfit, sort newest/oldest.
+- **No dates anywhere.**
+
+### 6.3 Item detail sheet
+- Shows the photo, subcategory (title), colour, and "in N outfits / M looks".
+- Change subcategory (same category only, "+ New" inline) and colour.
+- Like / Delete. Delete when used → `ITEM_IN_USE` message with counts and a button to Outfits or Lookbooks. Otherwise a confirm dialog.
+
+### 6.4 Upload flow (the + sheet → Upload clothes)
+1. Pick a category (4 options with the fixed images).
+2. Pick a photo (`<input type="file" accept="image/*">`). HEIC or other undecodable formats → "Try a JPG or PNG".
+3. **Preview:**
+   - **"Remove background" switch**: on by default, auto-off if the image already has transparency (§9).
+   - Checkered preview background.
+   - **Subcategory picker (required)** with "+ New"; Save stays disabled until one is picked.
+   - Detected **colour chip** ("Navy · detected · Change").
+4. Save:
+   1. Compress to WebP (max 1200 px long side, quality 0.85; PNG fallback if WebP is unsupported).
+   2. `POST /uploads/signature {kind:'item'}`.
+   3. Upload to Cloudinary with a progress bar.
+   4. `POST /items`.
+   5. Toast "Added to Tops", then go to Home on that tab.
+
+### 6.5 Outfits
+- `PageHeader`: "My outfits" left, **Create outfit** button right; the count below.
+- **WeatherCard** under the header: icon, temperature, condition, place, what-to-wear message.
+- Grid of **OutfitFigure** cards: stacked top → bottom → shoes, the top **slightly** overlapping the bottom, accessories as small circles on the right, **heart top-left**. No name, no date.
+- **OutfitDetailSheet:** the figure, the list of pieces, and three equal buttons in one row: **Favourite · Edit · Delete** (Delete = red text, with a confirm dialog).
+
+### 6.6 Outfit builder (`/outfits/new`, `/outfits/:id/edit`)
+- Full screen, no bottom nav. Header: back, title ("Create outfit" / "Edit outfit"), **Shuffle**.
+- Three rows at a **fixed 30% / 60% / 10%** of the space between header and footer: Tops, Bottoms, Shoes.
+- Each row:
+  - Horizontal scroll-snap carousel; the centred item is selected and the neighbours are dimmed.
+  - Row label is a **subcategory dropdown** ("All tops", "Shirts"…).
+  - Lock button: a locked row keeps its item on shuffle.
+- Rows use `GET /items?category=…&subcategoryId=…`. Load all pages up front (a closet is small); show a skeleton while loading.
+- **Save:**
+  1. Opens **AccessoriesSheet** (multi-select, can skip).
+  2. `POST /outfits` (or `PUT` when editing).
+  3. `OUTFIT_DUPLICATE` → inline message in the sheet; picks are kept.
+  4. Success → `/outfits`, toast "Outfit saved" / "Outfit updated".
+- Edit mode pre-selects the outfit's pieces and accessories.
+- Save is disabled if the Tops or Bottoms row is empty.
+
+### 6.7 Liked
+- A two-way switch: **Clothes** (liked items grid) | **Outfits** (favourite outfits grid).
+
+### 6.8 Wishlist
+- `PageHeader` "Wishlist".
+- A link input + **Add**:
+  - While adding, a pending card shows "Getting details…".
+  - `WISHLIST_DUPLICATE` → "Already in your wishlist".
+- Cards: photo (or a fallback panel with the shop name), product name, shop name with an external-link icon. Tap → opens the shop link in a new tab.
+- ✕ on a card → **confirm dialog** "Remove from wishlist?" → delete.
+
+### 6.9 Lookbooks
+- `PageHeader` with a back arrow: "Lookbooks" left, **Add look** right.
+- Grid of 3:4 photos with an "N tagged" badge.
+- **Add look:**
+  1. Pick a photo (background kept, no removal).
+  2. Compress to WebP (max 1600 px).
+  3. Tag clothes with a category-chip filter and a 4-column picker (tags optional, up to 20).
+  4. Upload and `POST /looks`.
+- **LookDetailSheet:** the photo, a strip of tagged items (tap → ItemDetailSheet), **Tag clothes** (replaces the tags) and **Delete** (with confirm).
+
+### 6.10 Wardrobe stats
+- **Composition card:**
+  - Chips: All · Tops · Bottoms · Shoes · Accessories.
+  - **Colour donut** (SVG, slices in the real colour hex, 2 px gaps, hover/tap tooltip) with a legend list (swatch, name, count, %).
+  - "By category" bars when on All; "By subcategory" bars when a category is picked.
+- **Other cards:**
+  - Outfit potential (possible / saved / looks).
+  - Closet in use (meter + "See them" → Home with the *not in any outfit* filter).
+  - Most styled (tap → ItemDetailSheet).
+  - Your palette (neutrals %, top 3 colours).
+  - Wishlist summary.
+- Data: `GET /stats?category=`.
+
+### 6.11 Settings
+- **Profile:** name, username, change/remove profile photo, change/remove cover photo (each an upload of kind `avatar`/`cover`).
+- **Appearance:** accent colour swatches (black, sage, dusty blue, clay, **plum = default**). Applied instantly.
+- **Weather:** "Use my location" switch, backup city (saved with Enter or blur; `VALIDATION_ERROR` → "City not found"), °C/°F.
+- **Subcategories:** per category, chips with item counts; tap → rename/delete sheet (`SUBCATEGORY_IN_USE` → "still has N items…"); "+ Add".
+- **Account:** Log out; **Delete account** dialog that requires typing `DELETE`.
+
+---
+
+## 7. Styling
+
+- White background everywhere (single light theme, no dark mode in v1).
+- Inter for all text. Headings semibold, no serif.
+- Tailwind theme via CSS variables in `globals.css`:
+  - Neutrals: `--background` (#FFFFFF), `--foreground` (#161616), `--muted` (#6E6D69), `--border` (#E8E7E3), `--soft` (#F4F4F1).
+  - `--accent` and `--accent-soft` are set at runtime from `me.settings.accent`:
+
+| accent | `--accent` | `--accent-soft` |
+|---|---|---|
+| black | #161616 | #EEEEEA |
+| sage | #55705A | #E7EDE6 |
+| blue | #4A6683 | #E5EAF0 |
+| clay | #9A5A3B | #F3E8E1 |
+| plum (default) | #6A4566 | #EFE7EE |
+
+- shadcn components are restyled through these variables (primary = accent).
+- Phone first. Content max-width 1040 px on desktop. Grids: 2 columns on phones, more as width allows.
+- Respect `prefers-reduced-motion`. Visible focus rings. Every icon-only button has an `aria-label`.
+
+---
+
+## 8. Weather (`features/weather/useWeather.ts`)
+
+1. If `settings.useLocation` is on: ask `navigator.geolocation` **once per session** (5 s timeout).
+   On success → `GET /weather?lat&lon` (coordinates rounded to 2 decimals).
+2. If location is off, denied or fails → `GET /weather` (uses the saved city).
+3. If there's no city either → the pill is hidden, and the WeatherCard says "Add your city in Settings".
+4. Show °F when `settings.tempUnit === 'F'` (convert on the client).
+
+---
+
+## 9. Background removal and colour detection (`features/upload/`)
+
+- `@imgly/background-removal` is **lazy-loaded** with a dynamic `import()` only when the upload preview opens, so it never slows the rest of the app.
+- **First use on a device:** the model downloads once (~40–80 MB). Show "Getting the background remover ready…" with a progress bar from the library's progress callback.
+  The PWA service worker caches the model files, so later uploads skip this.
+- Runs on the phone in the browser. Typical time is a few seconds; show a spinner.
+- **Transparency check** (`lib/image.ts`): if more than 1% of sampled pixels are already see-through, the switch starts **off** with the note "Your photo already has a see-through background."
+- Switch off → the photo is saved as-is (still compressed).
+- **Colour detection** (`lib/color-detect.ts`): ported from the prototype.
+  1. Sample opaque pixels.
+  2. Match each to the nearest of the 16 colours from `GET /colors` (redmean RGB distance).
+  3. The most common one wins.
+
+  Re-runs when the switch changes, unless the user picked a colour by hand.
+
+### 9.1 First development task: model test
+
+Before building the upload screen, make a throwaway page that runs `@imgly/background-removal`
+(default and smaller model variants) on **10 of the owner's real clothes photos** and shows the results side by side.
+Keep the library if the owner is happy with the results. If not, try other browser models (e.g. BiRefNet/RMBG via transformers.js) the same way.
+Record the choice in this section.
+
+---
+
+## 10. PWA (installable only)
+
+- `vite-plugin-pwa` with `registerType: 'autoUpdate'`.
+- **Manifest:**
+  - `name` / `short_name`: **Drape**.
+  - `display: standalone`, `start_url: /`, `background_color: #FFFFFF`, `theme_color`: plum `#6A4566`.
+  - Icons 192, 512 and maskable 512.
+- **Service worker caches:** the app shell (JS/CSS/fonts/HTML), the category images, and the background-removal model/WASM files (cache-first, long expiry).
+- **Not cached:** API responses and Cloudinary images. The app needs internet for data (offline browsing is out of scope).
+- If the app is opened offline: a simple "You're offline" screen.
+
+---
+
+## 11. Error handling in the UI
+
+| Error code | Shown as |
+|---|---|
+| `VALIDATION_ERROR` | Inline under the matching field (`details[].field`), else a toast |
+| `ITEM_IN_USE`, `SUBCATEGORY_IN_USE` | Message inside the sheet, with the counts from `details` |
+| `OUTFIT_DUPLICATE`, `OUTFIT_INVALID` | Message inside the accessories sheet |
+| `WISHLIST_DUPLICATE` | Under the link input |
+| `UPLOAD_INVALID` | Toast "Upload failed. Try again." |
+| `RATE_LIMITED` | Toast "Too many attempts. Try again in a few minutes." |
+| `NOT_FOUND` | Close the sheet, refetch the list, toast "That's no longer here." |
+| `INTERNAL_ERROR` / network | Toast "Something went wrong. Try again." |
+| `SESSION_EXPIRED` | Redirect to `/login` |
+
+Copy rules: short, plain, active voice; errors say what to do next; no dates; no "Outfit 3"-style numbering.
+
+---
+
+## 12. Open items
+
+| Topic | Note |
+|---|---|
+| Category tab photos | Owner supplies 5 real photos (all, top, bottom, shoes, accessory) |
+| Background-removal model | Confirm with the test in §9.1 |
+| Hosting | Decided later. Affects `VITE_API_URL` and the cookie `SameSite` setting |

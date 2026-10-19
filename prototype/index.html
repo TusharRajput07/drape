@@ -1,0 +1,1764 @@
+<title>Wardrobe Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: phone-first single column (max 1040px on desktop). Profile header on Home, fixed bottom nav,
+   full-screen outfit builder, bottom sheets for every flow. White throughout, one switchable accent. */
+:root {
+  --bg: #FFFFFF;
+  --ink: #161616;
+  --muted: #6E6D69;
+  --line: #E8E7E3;
+  --soft: #F4F4F1;
+  --accent: #161616;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #EEEEEA;
+  --danger: #B3261E;
+  --shade: rgba(22, 22, 22, .38);
+  --display: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --nav-h: 64px;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45;
+  padding-bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+}
+body.lock { overflow: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input { font: inherit; color: inherit; }
+img { display: block; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+svg { width: 22px; height: 22px; flex: none; }
+h1, h2 { font-family: var(--display); font-weight: 600; letter-spacing: -.015em; text-wrap: balance; margin: 0; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.muted { color: var(--muted); }
+.eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 999px; font-weight: 500; font-size: 14px; transition: transform .12s, opacity .12s; }
+.btn:active { transform: scale(.98); }
+.btn svg { width: 18px; height: 18px; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-primary:disabled { opacity: .35; cursor: not-allowed; }
+.btn-ghost { border: 1px solid var(--line); background: var(--bg); }
+.btn-danger { background: var(--danger); color: #FFFFFF; }
+.btn-text { height: auto; padding: 6px 4px; color: var(--muted); }
+.btn-block { width: 100%; }
+.icon-btn { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: 999px; }
+.icon-btn:hover { background: var(--soft); }
+
+/* Weather: small card floating on the cover photo */
+.weather {
+  position: absolute; top: 10px; left: 10px; z-index: 1; max-width: calc(100% - 124px);
+  display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px;
+  background: rgba(255, 255, 255, .9); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(22, 22, 22, .1); font-size: 12px; line-height: 1.3;
+}
+.weather > div { min-width: 0; }
+.w-icon { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
+.w-icon svg { width: 17px; height: 17px; }
+.w-temp { font-weight: 600; font-variant-numeric: tabular-nums; }
+.w-place { color: var(--muted); }
+.w-msg { display: block; }
+
+/* Profile header: cover photo as a rounded card, white panel overlapping its lower edge */
+.pcard { position: relative; margin-top: 12px; }
+.cover {
+  height: clamp(140px, 34vw, 230px); border-radius: 22px; overflow: hidden;
+  background-color: var(--accent-soft);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath d='M0 12L12 0M-3 3L3 -3M9 15L15 9' stroke='%23000' stroke-opacity='.05' stroke-width='1'/%3E%3C/svg%3E");
+}
+.cover img { width: 100%; height: 100%; object-fit: cover; }
+.proto-chip {
+  position: absolute; top: 10px; right: 10px;
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); border: 1px solid var(--line); font-size: 12px; font-weight: 500;
+}
+.proto-chip svg { width: 16px; height: 16px; }
+/* Name card overlaps the cover; profile photo and icon buttons sit across both edges */
+.ppanel {
+  position: relative; margin: -34px 12px 0; padding: 50px 14px 4px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 20px;
+  box-shadow: 0 1px 2px rgba(22, 22, 22, .05), 0 10px 28px rgba(22, 22, 22, .08);
+}
+@media (min-width: 720px) { .ppanel { margin-inline: 28px; } }
+.avatar {
+  position: absolute; top: -44px; left: 14px; width: 86px; height: 86px; border-radius: 50%; border: 4px solid var(--bg);
+  background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 14px rgba(22, 22, 22, .14);
+  display: grid; place-items: center; overflow: hidden; font-size: 30px; font-weight: 600;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.who { min-width: 0; }
+.who h1 { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.who .handle { color: var(--muted); font-size: 13px; }
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); margin-top: 10px; padding-block: 6px 2px; }
+.stat { display: grid; justify-items: center; gap: 1px; padding: 4px 0; border-radius: 10px; }
+.stat:hover { background: var(--soft); }
+.stat b { font-weight: 600; font-size: 17px; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 11.5px; }
+.quick { position: absolute; top: -21px; right: 12px; display: flex; gap: 8px; }
+.quick button {
+  width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--bg); color: var(--accent); border: 1px solid var(--line); box-shadow: 0 4px 12px rgba(22, 22, 22, .1);
+}
+.quick button:hover { background: var(--accent-soft); }
+.quick svg { width: 19px; height: 19px; }
+
+/* Sub-pages */
+.subhead { display: flex; align-items: center; gap: 6px; padding-block: 14px 8px; margin-left: -8px; }
+.subhead h1 { font-size: 22px; flex: 1; min-width: 0; }
+.subhead .btn { height: 38px; }
+.page-note { color: var(--muted); margin: 0 0 14px; max-width: 60ch; }
+
+/* Looks */
+.lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.look { position: relative; aspect-ratio: 3 / 4; max-width: 100%; border-radius: 16px; overflow: hidden; background: var(--soft); cursor: pointer; }
+.look img { width: 100%; height: 100%; object-fit: cover; }
+.l-badge { position: absolute; left: 8px; font-size: 11.5px; font-weight: 500; background: rgba(255, 255, 255, .92); padding: 3px 8px; border-radius: 999px; }
+.l-badge.b { bottom: 8px; }
+.l-badge.t { top: 8px; color: var(--muted); }
+.look-photo { border-radius: 18px; overflow: hidden; max-width: 100%; margin-top: 14px; background: var(--soft); display: grid; place-items: center; }
+.look-photo img { width: 100%; max-height: 52dvh; object-fit: contain; }
+.tag-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.tag-strip button { flex: 0 0 64px; height: 64px; border: 1px solid var(--line); border-radius: 12px; display: grid; place-items: center; }
+.tag-strip img { width: 78%; height: 78%; object-fit: contain; }
+
+/* Stats */
+.scards { display: grid; gap: 14px; }
+@media (min-width: 760px) { .scards { grid-template-columns: 1fr 1fr; } .scard.wide { grid-column: 1 / -1; } }
+.scard { border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.scard h2 { font-size: 16px; }
+.scard h3 { font-size: 13px; font-weight: 600; margin: 0 0 10px; }
+.scard .sub { color: var(--muted); font-size: 13px; margin: 3px 0 0; }
+.chip-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.chip-tabs .chip { flex: none; }
+.donut-wrap { display: grid; grid-template-columns: minmax(150px, 210px) minmax(0, 1fr); gap: 20px; align-items: center; }
+@media (max-width: 460px) { .donut-wrap { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
+.donut { position: relative; width: 100%; max-width: 210px; aspect-ratio: 1; }
+.donut svg { width: 100%; height: 100%; }
+.donut path { transition: opacity .15s; }
+.donut svg:hover path:not(:hover) { opacity: .4; }
+.donut .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.donut .center b { font-size: 28px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.donut .center span { font-size: 12px; color: var(--muted); }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; width: 100%; min-width: 0; }
+.legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 40px; gap: 10px; align-items: center; font-size: 13.5px; }
+.legend .sw { width: 12px; height: 12px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14); }
+.legend .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.legend .p { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.bars { display: grid; gap: 10px; }
+.bar-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 28px; gap: 10px; align-items: center; font-size: 13.5px; }
+.bar-track { height: 10px; border-radius: 4px; background: var(--soft); overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.bar-row .n { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kpi { background: var(--soft); border-radius: 14px; padding: 12px; min-width: 0; }
+.kpi b { display: block; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi span { font-size: 12px; color: var(--muted); }
+.meter { height: 10px; border-radius: 4px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.spot { display: flex; align-items: center; gap: 12px; }
+.spot .th { width: 60px; height: 60px; border: 1px solid var(--line); border-radius: 14px; display: grid; place-items: center; flex: none; }
+.spot .th img { width: 80%; height: 80%; object-fit: contain; }
+.pal-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; }
+.pal-chip .dot { width: 16px; height: 16px; }
+.tip { position: fixed; z-index: 90; pointer-events: none; background: var(--ink); color: #FFFFFF; font-size: 12.5px; padding: 6px 10px; border-radius: 8px; white-space: nowrap; transform: translate(-50%, calc(-100% - 12px)); }
+
+/* Settings */
+.set-group { border: 1px solid var(--line); border-radius: 18px; padding: 0 16px; margin-bottom: 14px; }
+.set-group > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding-top: 14px; }
+.set-row { padding-block: 14px; border-bottom: 1px solid var(--line); }
+.set-row:last-child { border-bottom: 0; }
+.set-row .switch-row { padding: 0; border: 0; }
+.set-row small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+.set-row .seg { margin-bottom: 0; }
+
+/* Category tabs */
+.tabs-bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); margin-top: 10px; }
+.tabs { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; padding: 12px 6px 10px; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 60px; flex: none; }
+.tab-img { width: 52px; height: 52px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; box-shadow: 0 0 0 1px var(--line); transition: box-shadow .15s; }
+.tab-img img { width: 74%; height: 74%; object-fit: contain; }
+.tab-label { font-size: 12px; color: var(--muted); letter-spacing: .01em; }
+.tab.on .tab-img { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+.tab.on .tab-label { color: var(--ink); font-weight: 600; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; padding-block: 18px 12px; }
+.section-head h2 { font-size: 18px; }
+
+/* Item grid */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+@media (min-width: 720px) { .grid { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 16px; } }
+.card { position: relative; aspect-ratio: 4 / 5; max-width: 100%; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); cursor: pointer; overflow: hidden; transition: border-color .15s; }
+.card:hover { border-color: #D4D3CE; }
+.card > img { width: 100%; height: 100%; object-fit: contain; padding: 12%; }
+.heart {
+  position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(255, 255, 255, .9); color: var(--ink);
+}
+.heart svg { width: 20px; height: 20px; }
+.heart.on { color: var(--accent); }
+.heart.on svg { fill: currentColor; }
+.heart.pop svg { animation: pop .32s ease; }
+@keyframes pop { 40% { transform: scale(1.3); } }
+
+/* Pages */
+.page-head { padding-block: 22px 16px; display: flex; gap: 12px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; }
+.page-head h1 { font-size: 26px; line-height: 1.15; }
+.page-head p { margin: 6px 0 0; color: var(--muted); max-width: 52ch; }
+.empty { border: 1px dashed var(--line); border-radius: 16px; padding: 36px 20px; text-align: center; color: var(--muted); }
+.empty h3 { font-family: var(--display); font-weight: 600; font-size: 17px; color: var(--ink); margin: 0 0 6px; }
+.empty .btn { margin-top: 14px; }
+
+/* Outfits */
+.ogrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+@media (min-width: 720px) { .ogrid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; } }
+.outfit { display: block; text-align: left; width: 100%; cursor: pointer; }
+.figure { position: relative; aspect-ratio: 3 / 5; max-width: 100%; border: 1px solid var(--line); border-radius: 18px; background: var(--bg); display: flex; flex-direction: column; align-items: center; padding: 6% 8% 4%; overflow: hidden; }
+.slot { width: 100%; display: grid; place-items: center; min-height: 0; }
+.slot img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.slot.t { flex: 0 0 34%; position: relative; z-index: 2; }
+.slot.b { flex: 0 0 48%; margin-top: -1%; position: relative; z-index: 1; }
+.slot.s { flex: 0 0 15%; }
+.slot.s img { max-width: 52%; }
+.slot.gone span { font-size: 11px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 4px 8px; }
+.acc-col { position: absolute; z-index: 3; top: 10px; right: 8px; display: flex; flex-direction: column; gap: 6px; }
+.acc-col span { width: 30px; height: 30px; border-radius: 50%; background: var(--bg); box-shadow: 0 0 0 1px var(--line); display: grid; place-items: center; }
+.acc-col img { width: 72%; height: 72%; object-fit: contain; }
+.outfit { position: relative; }
+.sheet-actions.three { gap: 8px; }
+.sheet-actions.three .btn { padding: 0 10px; gap: 6px; min-width: 0; }
+.danger-text { color: var(--danger); }
+.outfit .heart { left: 8px; right: auto; z-index: 4; }
+.no-back { margin-left: 0; }
+.wx-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 16px; border-radius: 16px; background: var(--accent-soft); font-size: 14px; line-height: 1.4; }
+.wx-card > div { min-width: 0; }
+.wx-card .w-icon { width: 40px; height: 40px; background: var(--bg); }
+.wx-card .w-icon svg { width: 22px; height: 22px; }
+
+/* Wishlist */
+.wl-form { display: flex; gap: 8px; }
+.wl-form input { flex: 1; min-width: 0; height: 46px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: var(--bg); }
+.wl-form input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.wl-err { color: var(--danger); font-size: 13px; margin: 8px 4px 0; }
+.wl-note { font-size: 12.5px; color: var(--muted); margin: 8px 4px 18px; }
+.wcard { position: relative; }
+.wlink { display: block; color: inherit; text-decoration: none; }
+.wimg { aspect-ratio: 4 / 5; max-width: 100%; border: 1px solid var(--line); border-radius: 16px; display: grid; place-items: center; overflow: hidden; }
+.wimg img { width: 100%; height: 100%; object-fit: contain; padding: 12%; }
+.wimg.fallback { background: var(--soft); align-content: center; gap: 4px; text-align: center; padding: 12px; }
+.wsite-big { font-family: var(--display); font-size: 20px; font-weight: 600; line-height: 1.1; overflow-wrap: anywhere; }
+.wnote { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.wbody { padding: 8px 4px 0; display: grid; gap: 2px; }
+.wname { font-size: 13.5px; font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wsite { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.wsite svg { width: 13px; height: 13px; }
+.wremove { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border-radius: 50%; background: rgba(255, 255, 255, .92); display: grid; place-items: center; box-shadow: 0 0 0 1px var(--line); }
+.wremove svg { width: 16px; height: 16px; }
+.wpending .wimg { background: var(--soft); }
+.spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Bottom nav */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: rgba(255, 255, 255, .94); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px));
+}
+.bn-inner { max-width: 560px; margin: 0 auto; height: var(--nav-h); display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; }
+.bn-item { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); padding-block: 6px; }
+.bn-item.on { color: var(--ink); font-weight: 600; }
+.bn-item.on svg { stroke-width: 2.2; }
+.bn-plus { justify-self: center; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; margin-top: -18px; box-shadow: 0 0 0 5px var(--bg); }
+.bn-plus svg { width: 24px; height: 24px; stroke-width: 2.2; }
+
+/* Sheets */
+#sheet-root { position: fixed; inset: 0; z-index: 60; }
+.backdrop { position: absolute; inset: 0; background: var(--shade); animation: fade .18s ease; }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: 90dvh; overflow-y: auto; background: var(--bg);
+  border-radius: 22px 22px 0 0; padding-block: 22px calc(22px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px));
+  animation: rise .22s cubic-bezier(.2, .8, .2, 1);
+}
+@media (min-width: 640px) {
+  .sheet { left: 50%; bottom: auto; top: 50%; width: min(520px, calc(100% - 32px)); transform: translate(-50%, -50%); border-radius: 22px; max-height: 86dvh; animation: fade .18s ease; }
+}
+.sheet-x { position: absolute; top: 12px; right: 12px; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; }
+.sheet-x:hover { background: var(--soft); }
+.sheet h2 { font-size: 21px; line-height: 1.25; padding-right: 40px; }
+.sheet .sub { color: var(--muted); margin: 6px 0 18px; }
+.sheet-actions { display: flex; gap: 10px; margin-top: 20px; }
+.sheet-actions .btn { flex: 1; }
+@keyframes rise { from { transform: translateY(24px); opacity: .4; } }
+@keyframes fade { from { opacity: 0; } }
+
+.cat-pick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.cat-opt { border: 1px solid var(--line); border-radius: 16px; padding: 16px 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cat-opt:hover { border-color: var(--ink); }
+.cat-opt .tab-img { width: 72px; height: 72px; }
+.cat-opt b { font-weight: 500; }
+
+.action-list { display: grid; gap: 8px; }
+.action-row { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; text-align: left; }
+.action-row:hover { border-color: var(--ink); }
+.action-row .ar-icon { width: 44px; height: 44px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; }
+.action-row b { display: block; font-weight: 500; }
+.action-row small { color: var(--muted); font-size: 13px; }
+
+.preview { aspect-ratio: 1; max-width: 100%; border-radius: 16px; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; position: relative; }
+.preview.checker { background-color: #FFFFFF; background-image: linear-gradient(45deg, #F0F0ED 25%, transparent 25%, transparent 75%, #F0F0ED 75%), linear-gradient(45deg, #F0F0ED 25%, transparent 25%, transparent 75%, #F0F0ED 75%); background-size: 20px 20px; background-position: 0 0, 10px 10px; }
+.preview img { max-width: 86%; max-height: 86%; object-fit: contain; }
+.preview .proc { display: grid; justify-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+.seg { display: inline-flex; background: var(--soft); border-radius: 999px; padding: 3px; margin-bottom: 12px; }
+.seg button { height: 34px; padding: 0 14px; border-radius: 999px; font-size: 13px; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--ink); font-weight: 500; box-shadow: 0 0 0 1px var(--line); }
+.field { display: grid; gap: 6px; margin-top: 14px; }
+.field label { font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; }
+.field label output { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.field input[type="text"] { height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; background: var(--bg); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.hint { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+.warn { font-size: 13px; color: var(--danger); margin: 10px 0 0; }
+.confirm { margin-top: 16px; padding: 14px; border-radius: 14px; background: var(--soft); }
+.confirm p { margin: 0 0 10px; }
+.confirm .row { display: flex; gap: 8px; }
+.confirm .row .btn { flex: 1; height: 40px; }
+
+.detail-img { aspect-ratio: 1; max-width: 100%; border: 1px solid var(--line); border-radius: 18px; display: grid; place-items: center; margin-top: 16px; }
+.detail-img img { max-width: 78%; max-height: 78%; object-fit: contain; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 16px 0 0; font-size: 14px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.pick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pick { position: relative; aspect-ratio: 1; max-width: 100%; border: 1px solid var(--line); border-radius: 14px; display: grid; place-items: center; }
+.pick img { width: 74%; height: 74%; object-fit: contain; }
+.pick.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pick .tick { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: none; place-items: center; }
+.pick.on .tick { display: grid; }
+.pick .tick svg { width: 14px; height: 14px; stroke-width: 2.6; }
+
+.pieces { display: grid; gap: 8px; margin-top: 16px; }
+.piece { display: flex; align-items: center; gap: 12px; }
+.piece span.th { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); display: grid; place-items: center; flex: none; }
+.piece span.th img { width: 78%; height: 78%; object-fit: contain; }
+.big-figure { max-width: 260px; margin: 16px auto 0; }
+
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.swatch i { width: 40px; height: 40px; border-radius: 50%; display: block; box-shadow: 0 0 0 1px var(--line); }
+.swatch.on { color: var(--ink); font-weight: 600; }
+.swatch.on i { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink); }
+.proto-list { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; display: grid; gap: 4px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; font-variant-numeric: tabular-nums; }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.divider { height: 1px; background: var(--line); margin: 20px 0; }
+
+/* Outfit builder */
+#builder {
+  position: fixed; inset: 0; z-index: 40; background: var(--bg); display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.b-head { display: flex; align-items: center; gap: 4px; height: 56px; flex: none; padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); }
+.b-head h1 { font-size: 17px; flex: 1; }
+.b-head .icon-btn svg { width: 21px; height: 21px; }
+.b-rows { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.b-row { position: relative; min-height: 0; border-bottom: 1px solid var(--line); transition: flex-basis .2s; }
+.b-row:last-child { border-bottom: 0; }
+.b-tag { position: absolute; top: 6px; left: max(12px, env(safe-area-inset-left, 0px)); z-index: 2; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: rgba(255, 255, 255, .85); padding: 2px 6px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.b-lock { position: absolute; top: 4px; right: max(8px, env(safe-area-inset-right, 0px)); z-index: 2; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); background: rgba(255, 255, 255, .85); }
+.b-lock svg { width: 17px; height: 17px; }
+.b-lock[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.b-row.tiny .b-tag { top: 2px; }
+.b-sub { font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--ink); background: transparent; border: 0; padding: 0 2px 0 0; cursor: pointer; max-width: 46vw; }
+.b-row.tiny .b-lock { top: 50%; transform: translateY(-50%); width: 28px; height: 28px; }
+.b-scroll { height: 100%; display: flex; align-items: stretch; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; position: relative; padding-block: 4px; --sw: 160px; }
+.b-scroll::-webkit-scrollbar { display: none; }
+.b-spacer { flex: 0 0 calc(50% - var(--sw) / 2 - 12px); }
+.b-slide { flex: 0 0 var(--sw); scroll-snap-align: center; display: grid; place-items: center; opacity: .32; transform: scale(.88); transition: opacity .2s, transform .2s; min-height: 0; }
+.b-slide.cur { opacity: 1; transform: none; }
+.b-slide img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.b-empty { height: 100%; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 0 40px; }
+.b-foot { flex: none; padding-block: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-top: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+.b-foot .btn-primary { flex: 1; max-width: 520px; margin: 0 auto; }
+.b-foot small { color: var(--muted); font-size: 12px; }
+
+/* Toast */
+#toast { position: fixed; left: 50%; bottom: calc(var(--nav-h) + 18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 80; width: max-content; max-width: calc(100% - 32px); }
+.toast { display: flex; align-items: center; gap: 14px; background: var(--ink); color: #FFFFFF; padding: 10px 10px 10px 16px; border-radius: 999px; font-size: 14px; animation: rise .2s ease; }
+.toast button { color: #FFFFFF; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .14); }
+
+/* Filters, colors, outfit favorites */
+.head-right { display: flex; align-items: center; gap: 10px; }
+.filter-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; font-weight: 500; }
+.filter-btn svg { width: 16px; height: 16px; }
+.filter-btn.on { border-color: var(--accent); }
+.badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 11px; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+.color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 12px 6px; }
+.color-opt { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); text-align: center; }
+.color-opt i, .dot { width: 30px; height: 30px; border-radius: 50%; display: block; flex: none; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14); }
+.color-opt.on { color: var(--ink); font-weight: 600; }
+.color-opt.on i { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14), 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+.color-chip { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px 0 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; font-weight: 500; margin-top: 12px; }
+.color-chip .dot { width: 20px; height: 20px; }
+.color-chip em { font-style: normal; font-weight: 400; color: var(--muted); }
+.fact-color { display: inline-flex; align-items: center; gap: 8px; }
+.fact-color .dot { width: 16px; height: 16px; }
+.link-btn { color: var(--accent); font-weight: 500; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; margin-left: 4px; }
+.switch-row { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 12px 0; border-bottom: 1px solid var(--line); text-align: left; font-size: 14px; }
+.switch { width: 40px; height: 24px; border-radius: 999px; background: var(--line); position: relative; flex: none; transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: transform .15s; }
+.switch-row[aria-checked="true"] .switch { background: var(--accent); }
+.switch-row[aria-checked="true"] .switch::after { transform: translateX(16px); }
+.o-meta { align-items: center; }
+.o-right { display: flex; align-items: center; gap: 2px; }
+.o-heart { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); }
+.o-heart svg { width: 18px; height: 18px; }
+.o-heart.on { color: var(--accent); }
+.o-heart.on svg, .btn .fill { fill: currentColor; }
+.still { animation: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div id="profile">
+  <div class="wrap">
+    <div class="pcard">
+      <div class="cover" id="cover"></div>
+      <div class="weather" id="weather"></div>
+      <button class="proto-chip" data-act="proto"></button>
+      <div class="ppanel">
+        <div class="avatar" id="avatar"></div>
+        <div class="quick" id="quick"></div>
+        <div class="who"><h1 id="pname"></h1><div class="handle" id="phandle"></div></div>
+        <div class="stats" id="stats"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<main id="view"></main>
+
+<nav class="bottom-nav" aria-label="Main">
+  <div class="bn-inner">
+    <button class="bn-item" data-act="nav" data-view="home"></button>
+    <button class="bn-item" data-act="nav" data-view="outfits"></button>
+    <button class="bn-plus" data-act="plus" aria-label="Add"></button>
+    <button class="bn-item" data-act="nav" data-view="liked"></button>
+    <button class="bn-item" data-act="nav" data-view="wishlist"></button>
+  </div>
+</nav>
+
+<div id="builder" hidden></div>
+<div id="sheet-root" hidden></div>
+<div id="toast" aria-live="polite"></div>
+
+<input type="file" id="file-item" accept="image/*" hidden>
+<input type="file" id="file-cover" accept="image/*" hidden>
+<input type="file" id="file-avatar" accept="image/*" hidden>
+<input type="file" id="file-look" accept="image/*" hidden>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const KEY = 'wardrobe-proto-v1';
+const CATS = ['top', 'bottom', 'shoes', 'acc'];
+const LABEL = { top: 'Tops', bottom: 'Bottoms', shoes: 'Shoes', acc: 'Accessories' };
+const ONE = { top: 'Top', bottom: 'Bottom', shoes: 'Shoes', acc: 'Accessory' };
+const ACCENTS = [
+  { id: 'black', name: 'Black', c: '#161616', soft: '#EEEEEA' },
+  { id: 'sage', name: 'Sage', c: '#55705A', soft: '#E7EDE6' },
+  { id: 'blue', name: 'Dusty blue', c: '#4A6683', soft: '#E5EAF0' },
+  { id: 'clay', name: 'Clay', c: '#9A5A3B', soft: '#F3E8E1' },
+  { id: 'plum', name: 'Plum', c: '#6A4566', soft: '#EFE7EE' },
+];
+const SPLITS = [[30, 60, 10], [35, 45, 20], [40, 40, 20], [33, 50, 17]];
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- Icons ---------- */
+const I = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/>${extra}</svg>`;
+const ICON = {
+  home: I('M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z'),
+  hanger: I('M12 7.5a2 2 0 1 1 2-2c0 1.2-2 1.6-2 3.2v.8l-8.4 5.7A1.5 1.5 0 0 0 4.4 18h15.2a1.5 1.5 0 0 0 .8-2.8L12 9.5'),
+  plus: I('M12 5v14M5 12h14'),
+  heart: I('M12 20.5s-7.5-4.6-9.5-9.3C1.2 8 3.2 4.5 6.7 4.5c2.1 0 3.6 1.2 5.3 3.1 1.7-1.9 3.2-3.1 5.3-3.1 3.5 0 5.5 3.5 4.2 6.7-2 4.7-9.5 9.3-9.5 9.3z'),
+  bookmark: I('M6 3.5h12V21l-6-4.5L6 21z'),
+  shuffle: I('M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5'),
+  lock: I('M8 11V7.5a4 4 0 0 1 8 0V11', '<rect x="5" y="11" width="14" height="10" rx="2"/>'),
+  unlock: I('M8 11V7.5a4 4 0 0 1 7.6-1.8', '<rect x="5" y="11" width="14" height="10" rx="2"/>'),
+  x: I('M6 6l12 12M18 6 6 18'),
+  back: I('M15 18l-6-6 6-6'),
+  trash: I('M4 7h16M9.5 7V4.5h5V7M6 7l1 13h10l1-13'),
+  ext: I('M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'),
+  sliders: I('M4 6h8m4 0h4M4 12h2m4 0h10M4 18h10m4 0h2', '<circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>'),
+  camera: I('M4 8h3l2-3h6l2 3h3v11H4z', '<circle cx="12" cy="13" r="3.5"/>'),
+  check: I('M5 12.5l4.5 4.5L19 7'),
+  pen: I('M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4'),
+  sun: I('M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4', '<circle cx="12" cy="12" r="4"/>'),
+  cloud: I('M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.4 1.5A3.3 3.3 0 0 0 7 18z'),
+  rain: I('M7 14h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.4 1.5A3.3 3.3 0 0 0 7 14zM9 17l-1 3M13 17l-1 3M17 17l-1 3'),
+  chart: I('M4 20V11M10 20V5M16 20v-6M2 20h20'),
+  image: I('M4 5h16v14H4zM4 16l4.5-4.5 4 4 2.5-2.5L20 18', '<circle cx="9" cy="9.5" r="1.6"/>'),
+  link: I('M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'),
+  shirt: I('M8 3 3 6l2 4 3-1v12h8V9l3 1 2-4-5-3c-.5 1.5-2 2.5-4 2.5S8.5 4.5 8 3z'),
+};
+
+/* ---------- Garment illustrations (sample data only) ---------- */
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const t = f < 0 ? 0 : 255, a = Math.abs(f);
+  r = Math.round(r + (t - r) * a); g = Math.round(g + (t - g) * a); b = Math.round(b + (t - b) * a);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+const LONG = 'M74 26 L48 34 C36 40 30 56 28 76 L20 172 L42 176 L56 96 L56 180 L144 180 L144 96 L158 176 L180 172 L172 76 C170 56 164 40 152 34 L126 26 Z';
+const TEE = 'M72 30 L46 38 L18 66 L36 88 L54 76 L54 178 L146 178 L146 76 L164 88 L182 66 L154 38 L128 30 C122 44 112 50 100 50 C88 50 78 44 72 30 Z';
+const PANTS = 'M58 18 L142 18 L148 182 L108 182 L100 72 L92 182 L52 182 Z';
+function garment(kind, c, c2) {
+  const d = shade(c, -.3), l = shade(c, .28), st = `stroke="${d}" stroke-width="2" stroke-linejoin="round"`;
+  c2 = c2 || d;
+  switch (kind) {
+    case 'tee': return `<path d="${TEE}" fill="${c}" ${st}/><path d="M54 96 L54 178 L68 178 Z" fill="${d}" opacity=".1"/><path d="M72 30 C78 44 88 50 100 50 C112 50 122 44 128 30" fill="none" stroke="${d}" stroke-width="5"/>`;
+    case 'polo': return `<path d="${TEE}" fill="${c}" ${st}/><path d="M72 30 L100 46 L90 58 L70 38 Z M128 30 L100 46 L110 58 L130 38 Z" fill="${l}" ${st}/><path d="M100 46 L100 76" stroke="${d}" stroke-width="2"/><circle cx="104" cy="58" r="2.4" fill="${d}"/><circle cx="104" cy="70" r="2.4" fill="${d}"/>`;
+    case 'shirt': return `<path d="${LONG}" fill="${c}" ${st}/><path d="M100 50 L100 180" stroke="${d}" stroke-width="2"/>${[72, 98, 124, 150].map(y => `<circle cx="105" cy="${y}" r="2.6" fill="${d}"/>`).join('')}<path d="M116 76 L136 76 L136 98 L116 98 Z" fill="none" stroke="${d}" stroke-width="1.6"/><path d="M21 162 L43 166 M157 166 L179 162" stroke="${d}" stroke-width="3"/><path d="M74 26 L100 50 L86 62 L70 36 Z M126 26 L100 50 L114 62 L130 36 Z" fill="${l}" ${st}/>`;
+    case 'hoodie': return `<path d="M70 34 C64 6 136 6 130 34 Z" fill="${shade(c, -.15)}" ${st}/><path d="${LONG}" fill="${c}" ${st}/><path d="M72 30 C80 46 92 54 100 54 C108 54 120 46 128 30" fill="none" stroke="${d}" stroke-width="4"/><path d="M94 54 L92 84 M106 54 L108 84" stroke="${l}" stroke-width="2.6" stroke-linecap="round"/><path d="M70 130 L130 130 L138 166 L62 166 Z" fill="${shade(c, -.1)}" ${st}/><path d="M56 172 L144 172 M21 162 L43 166 M157 166 L179 162" stroke="${d}" stroke-width="3"/>`;
+    case 'sweater': return `<defs><pattern id="p" width="10" height="22" patternUnits="userSpaceOnUse"><rect width="10" height="11" fill="${c2}"/></pattern></defs><path d="${LONG}" fill="${c}"/><path d="${LONG}" fill="url(#p)"/><path d="${LONG}" fill="none" stroke="${shade(c2, -.2)}" stroke-width="2" stroke-linejoin="round"/><path d="M76 28 C84 44 116 44 124 28" fill="none" stroke="${shade(c2, -.2)}" stroke-width="6"/>`;
+    case 'jeans': return `<path d="${PANTS}" fill="${c}" ${st}/><path d="M58 18 L142 18 L142.6 30 L57.4 30 Z" fill="${d}" opacity=".35"/><path d="M100 30 L100 72 M100 62 C94 62 92 54 92 30" fill="none" stroke="${d}" stroke-width="1.6"/><path d="M62 32 C72 46 80 48 86 48 M138 32 C128 46 120 48 114 48" fill="none" stroke="${c2}" stroke-width="2"/><path d="M56 60 L54 176 M144 60 L146 176" stroke="${c2}" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M53 172 L91 172 M109 172 L147 172" stroke="${d}" stroke-width="1.5"/>`;
+    case 'chinos': return `<path d="${PANTS}" fill="${c}" ${st}/><path d="M58 18 L142 18 L142.6 30 L57.4 30 Z" fill="${d}" opacity=".3"/><path d="M100 30 L100 72" stroke="${d}" stroke-width="1.6"/><path d="M64 32 L80 54 M136 32 L120 54" stroke="${d}" stroke-width="1.6"/><path d="M76 40 L72 180 M124 40 L128 180" stroke="${d}" stroke-width="1" opacity=".35"/>`;
+    case 'shorts': return `<path d="M56 40 L144 40 L154 132 L108 138 L100 88 L92 138 L46 132 Z" fill="${c}" ${st}/><path d="M56 40 L144 40 L144.8 52 L55.2 52 Z" fill="${d}" opacity=".3"/><path d="M100 52 L100 88" stroke="${d}" stroke-width="1.6"/><path d="M62 54 L78 74 M138 54 L122 74" stroke="${d}" stroke-width="1.6"/>`;
+    case 'joggers': return `<path d="M60 18 L140 18 L146 164 L142 182 L108 182 L106 164 L100 72 L94 164 L92 182 L58 182 L54 164 Z" fill="${c}" ${st}/><path d="M56 164 L94 164 L92 182 L58 182 Z M106 164 L144 164 L142 182 L108 182 Z" fill="${shade(c, -.14)}" ${st}/><path d="M60 18 L140 18 L140.5 32 L59.5 32 Z" fill="${shade(c, -.14)}"/><path d="M96 32 L94 52 M104 32 L106 52" stroke="${l}" stroke-width="2.4" stroke-linecap="round"/><path d="M60 48 C66 56 72 60 80 60 M140 48 C134 56 128 60 120 60" fill="none" stroke="${d}" stroke-width="1.6"/>`;
+    case 'sneaker': return `<path d="M22 132 C22 112 30 96 48 92 L84 82 C94 78 104 82 110 90 C122 106 150 112 170 118 C182 122 184 130 182 136 L22 136 Z" fill="${c}" ${st}/><path d="M60 124 C90 110 120 110 152 124" stroke="${c2}" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M22 108 L34 104 L34 134 L22 134 Z" fill="${c2}"/><path d="M48 92 C60 100 76 98 84 82" fill="none" stroke="${d}" stroke-width="3"/><path d="M92 88 L104 98 M100 84 L112 94 M108 92 L118 100" stroke="${d}" stroke-width="2.5" stroke-linecap="round"/><path d="M16 134 L184 134 C188 134 188 152 180 154 L26 154 C14 154 12 136 16 134 Z" fill="#FAFAF8" stroke="#B9B8B2" stroke-width="2"/><path d="M20 144 L184 144" stroke="#D6D5CF" stroke-width="1.5"/>`;
+    case 'boot': return `<path d="M44 40 L104 40 L106 112 C132 114 160 120 172 132 C178 138 178 142 176 146 L40 146 C38 120 42 80 44 40 Z" fill="${c}" ${st}/><path d="M44 40 L104 40 L104 50 L44 50 Z" fill="${l}" opacity=".5"/>${[60, 74, 88, 102].map(y => `<circle cx="98" cy="${y}" r="2.5" fill="${l}"/>`).join('')}<path d="M98 60 L88 68 M98 74 L88 82 M98 88 L88 96" stroke="${l}" stroke-width="2"/><path d="M34 144 L180 144 L180 160 L34 160 Z" fill="${shade(c, -.5)}"/><path d="M34 150 L72 150" stroke="${shade(c, -.2)}" stroke-width="2"/>`;
+    case 'loafer': return `<path d="M24 136 C24 120 34 108 54 106 C80 104 104 100 130 108 C152 114 172 120 178 130 L180 138 L24 138 Z" fill="${c}" ${st}/><path d="M104 104 C118 108 132 114 140 124" stroke="${d}" stroke-width="5" fill="none"/><path d="M40 110 C60 120 86 116 100 102" fill="none" stroke="${d}" stroke-width="3"/><path d="M20 136 L182 136 L180 148 L24 148 Z" fill="${shade(c, -.45)}"/>`;
+    case 'cap': return `<path d="M48 124 C48 72 76 54 104 54 C134 54 156 76 156 124 Z" fill="${c}" ${st}/><path d="M146 118 C170 116 190 122 192 132 C180 138 160 136 138 128 Z" fill="${shade(c, -.2)}" ${st}/><path d="M104 54 L104 124 M78 62 C70 82 70 104 74 124 M130 62 C140 82 142 104 140 124" stroke="${shade(c, .2)}" stroke-width="1.6" fill="none"/><circle cx="104" cy="54" r="5" fill="${shade(c, .15)}"/><path d="M49 118 L152 118" stroke="${shade(c, .15)}" stroke-width="3"/>`;
+    case 'watch': return `<path d="M80 20 L120 20 L116 70 L84 70 Z M84 130 L116 130 L120 180 L80 180 Z" fill="${c2}" stroke="${shade(c2, -.3)}" stroke-width="2"/><path d="M86 40 L114 40 M86 160 L114 160" stroke="${shade(c2, -.3)}" stroke-width="1.5"/><rect x="136" y="93" width="10" height="14" rx="2" fill="${d}"/><circle cx="100" cy="100" r="40" fill="${c}" stroke="${d}" stroke-width="3"/><circle cx="100" cy="100" r="31" fill="#FBFBF9" stroke="${d}" stroke-width="1.5"/>${[0, 90, 180, 270].map(a => `<path d="M100 73 L100 78" stroke="#333" stroke-width="2" transform="rotate(${a} 100 100)"/>`).join('')}<path d="M100 100 L100 80 M100 100 L114 108" stroke="#222" stroke-width="2.5" stroke-linecap="round"/>`;
+    case 'bag': return `<path d="M70 82 C70 38 130 38 130 82" fill="none" stroke="${d}" stroke-width="6"/><path d="M44 78 L156 78 L166 178 L34 178 Z" fill="${c}" ${st}/><path d="M45 92 L155 92" stroke="${d}" stroke-width="1.6"/><rect x="88" y="100" width="24" height="14" rx="3" fill="${d}" opacity=".5"/>`;
+    case 'sunglasses': return `<path d="M30 92 L12 82 M170 92 L188 82" stroke="${c}" stroke-width="5" stroke-linecap="round"/><path d="M28 90 L92 90 C92 118 84 132 62 132 C40 132 30 118 28 90 Z M108 90 L172 90 C170 118 160 132 138 132 C116 132 108 118 108 90 Z" fill="${c2}" stroke="${c}" stroke-width="6" stroke-linejoin="round"/><path d="M92 96 C96 88 104 88 108 96" stroke="${c}" stroke-width="5" fill="none"/><path d="M42 100 L56 100 M122 100 L136 100" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity=".35"/>`;
+    case 'belt': return `<rect x="10" y="88" width="180" height="24" rx="4" fill="${c}" ${st}/><path d="M14 93 L186 93 M14 107 L186 107" stroke="${l}" stroke-width="1" stroke-dasharray="3 3"/>${[130, 146, 162].map(x => `<circle cx="${x}" cy="100" r="3" fill="${d}"/>`).join('')}<rect x="40" y="80" width="34" height="40" rx="5" fill="none" stroke="#B4AE9F" stroke-width="6"/><path d="M57 100 L80 100" stroke="#B4AE9F" stroke-width="4" stroke-linecap="round"/>`;
+    case 'hanger': return `<path d="M100 52 C100 40 114 38 114 50 C114 58 100 60 100 70 L28 120 C20 126 24 136 32 136 L168 136 C176 136 180 126 172 120 L100 70" fill="none" stroke="${c}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+  return '';
+}
+const svgCache = new Map();
+function svgUri(kind, c, c2) {
+  const k = kind + c + c2;
+  if (!svgCache.has(k)) svgCache.set(k, 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">${garment(kind, c, c2)}</svg>`));
+  return svgCache.get(k);
+}
+// Sample "photos" for looks: a simple figure wearing the tagged sample items
+function lookUri(ref) {
+  if (svgCache.has(ref)) return svgCache.get(ref);
+  const [, ids, bg] = ref.split(':');
+  const [t, b, s] = ids.split(',').map(id => byId(id));
+  const g = (it, tr) => { if (!it || !it.img.startsWith('svg:')) return ''; const [k, c, c2] = it.img.slice(4).split(':'); return `<g transform="${tr}">${garment(k, c, c2)}</g>`; };
+  const skin = '#C99872';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400"><rect width="300" height="400" fill="${bg}"/><ellipse cx="150" cy="364" rx="92" ry="10" fill="#000000" opacity=".07"/>
+    <rect x="126" y="296" width="12" height="50" fill="${skin}"/><rect x="162" y="296" width="12" height="50" fill="${skin}"/>
+    ${g(b, 'translate(85 190) scale(.65)')}${g(s, 'translate(111 313) scale(.32)')}${g(s, 'translate(147 313) scale(.32)')}
+    <rect x="140" y="72" width="20" height="24" fill="${skin}"/><circle cx="150" cy="54" r="28" fill="${skin}"/>
+    <path d="M121 54 C120 20 180 20 179 54 C170 40 130 40 121 54 Z" fill="#2B211C"/>${g(t, 'translate(60 82) scale(.9)')}</svg>`;
+  const uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  svgCache.set(ref, uri);
+  return uri;
+}
+const imgSrc = ref => !ref ? '' : ref.startsWith('svg:') ? svgUri(...ref.slice(4).split(':')) : ref.startsWith('look:') ? lookUri(ref) : ref;
+// Fixed tab images. In the real app these become real product photos bundled with the code.
+const TAB_ALL = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><g transform="translate(76 70) scale(.62)">${garment('jeans', '#3B5A80', '#D9A85C')}</g><g transform="translate(0 6) scale(.62)">${garment('tee', '#F4F3EF')}</g></svg>`);
+const TAB_IMG = {
+  all: TAB_ALL, top: svgUri('tee', '#F4F3EF'), bottom: svgUri('jeans', '#3B5A80', '#D9A85C'),
+  shoes: svgUri('sneaker', '#F6F6F3', '#2F3E5C'), acc: svgUri('cap', '#1F1F1F'),
+};
+
+/* ---------- Colors (detected at upload, used by filters) ---------- */
+const COLORS = [
+  { id: 'black', name: 'Black', hex: '#1F1F1F' }, { id: 'white', name: 'White', hex: '#F4F3EF' }, { id: 'grey', name: 'Grey', hex: '#9A9C9F' },
+  { id: 'beige', name: 'Beige', hex: '#D6C6A5' }, { id: 'brown', name: 'Brown', hex: '#6B4A33' }, { id: 'navy', name: 'Navy', hex: '#2B3A57' },
+  { id: 'blue', name: 'Blue', hex: '#3F6FA8' }, { id: 'lightblue', name: 'Light blue', hex: '#A9C3DB' }, { id: 'green', name: 'Green', hex: '#5E7A4E' },
+  { id: 'olive', name: 'Olive', hex: '#6B7350' }, { id: 'red', name: 'Red', hex: '#B33A3A' }, { id: 'maroon', name: 'Maroon', hex: '#6E2B33' },
+  { id: 'pink', name: 'Pink', hex: '#E3A6B4' }, { id: 'yellow', name: 'Yellow', hex: '#E2C044' }, { id: 'orange', name: 'Orange', hex: '#D9783A' },
+  { id: 'purple', name: 'Purple', hex: '#6E4C8C' },
+];
+const hexRgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+const RGB = COLORS.map(c => [c.id, ...hexRgb(c.hex)]);
+function nearestColor(r, g, b) {
+  let best = RGB[0][0], bd = Infinity;
+  for (const [id, cr, cg, cb] of RGB) {
+    const rm = (r + cr) / 2, dr = r - cr, dg = g - cg, db = b - cb;
+    const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+    if (d < bd) { bd = d; best = id; }
+  }
+  return best;
+}
+const colorOfHex = hex => nearestColor(...hexRgb(hex));
+const colorById = id => COLORS.find(c => c.id === id) || { id: '', name: 'Not set', hex: '#FFFFFF' };
+// Most common palette color among the opaque pixels
+function detectColor(canvas) {
+  const w = canvas.width, h = canvas.height;
+  const p = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const step = Math.max(1, Math.floor(Math.sqrt(w * h / 6000)));
+  const counts = new Map();
+  for (let y = 0; y < h; y += step) for (let x = 0; x < w; x += step) {
+    const o = (y * w + x) * 4;
+    if (p[o + 3] < 200) continue;
+    const id = nearestColor(p[o], p[o + 1], p[o + 2]);
+    counts.set(id, (counts.get(id) || 0) + 1);
+  }
+  let best = 'grey', bn = 0;
+  counts.forEach((n, id) => { if (n > bn) { bn = n; best = id; } });
+  return best;
+}
+
+/* ---------- State (mirrors the planned tables: users, items, outfits + outfit_items, wishlist) ---------- */
+// Subcategories are per user: a starter list is copied at signup, then the user owns them
+const STARTER_SUBS = {
+  top: ['T-shirts', 'Shirts', 'Polos', 'Hoodies', 'Sweaters', 'Jackets'],
+  bottom: ['Jeans', 'Trousers', 'Chinos', 'Shorts', 'Joggers'],
+  shoes: ['Sneakers', 'Boots', 'Loafers', 'Formal shoes', 'Sandals'],
+  acc: ['Watches', 'Caps', 'Bags', 'Sunglasses', 'Belts'],
+};
+const KIND_SUB = { tee: 'T-shirts', shirt: 'Shirts', polo: 'Polos', hoodie: 'Hoodies', sweater: 'Sweaters', jeans: 'Jeans', chinos: 'Chinos', shorts: 'Shorts', joggers: 'Joggers', sneaker: 'Sneakers', boot: 'Boots', loafer: 'Loafers', cap: 'Caps', watch: 'Watches', bag: 'Bags', sunglasses: 'Sunglasses', belt: 'Belts' };
+const starterSubs = () => CATS.flatMap(c => STARTER_SUBS[c].map((name, i) => ({ id: `sc_${c}_${i}`, cat: c, name })));
+const subForKind = (subs, cat, kind) => (subs.find(s => s.cat === cat && s.name === KIND_SUB[kind]) || subs.find(s => s.cat === cat)).id;
+
+function seed() {
+  const now = Date.now(), day = 864e5;
+  const subcats = starterSubs();
+  const raw = [
+    ['top', 'tee', '#F4F3EF', '', 1], ['top', 'shirt', '#2F3E5C'], ['top', 'hoodie', '#6B7350', '', 1], ['top', 'tee', '#1F1F1F'],
+    ['top', 'shirt', '#A9C3DB'], ['top', 'sweater', '#EFE8D8', '#2D3B57'], ['top', 'polo', '#6E2B33'], ['top', 'shirt', '#D9CBB0'],
+    ['bottom', 'jeans', '#3B5A80', '#D9A85C', 1], ['bottom', 'jeans', '#26282D', '#8C8C8C'], ['bottom', 'chinos', '#C8B48E'],
+    ['bottom', 'joggers', '#8E9094'], ['bottom', 'shorts', '#6F7656'], ['bottom', 'jeans', '#93AECA', '#D9A85C'],
+    ['shoes', 'sneaker', '#F6F6F3', '#2F3E5C', 1], ['shoes', 'boot', '#4A3426'], ['shoes', 'loafer', '#8B5A36'], ['shoes', 'sneaker', '#9A9C9F', '#F6F6F3'],
+    ['acc', 'cap', '#1F1F1F'], ['acc', 'watch', '#C9CCD1', '#4A3A2C'], ['acc', 'bag', '#C2A27C'], ['acc', 'sunglasses', '#1F1F1F', '#3D4A3F'], ['acc', 'belt', '#5B3A26'],
+  ];
+  const items = raw.map((r, i) => ({
+    id: 's' + (i + 1), cat: r[0], sub: subForKind(subcats, r[0], r[1]), color: colorOfHex(r[2]), img: `svg:${r[1]}:${r[2]}:${r[3] || ''}`, liked: !!r[4], createdAt: now - (raw.length - i) * day,
+  }));
+  return {
+    v: 1,
+    user: { name: 'Tushar Rajput', handle: 'tushar', avatar: null, cover: null },
+    items,
+    outfits: [
+      { id: 'o1', no: 1, top: 's1', bottom: 's9', shoes: 's15', acc: ['s20', 's22'], liked: true, createdAt: now - 6 * day },
+      { id: 'o2', no: 2, top: 's2', bottom: 's11', shoes: 's17', acc: ['s23'], createdAt: now - 3 * day },
+      { id: 'o3', no: 3, top: 's3', bottom: 's12', shoes: 's18', acc: ['s19'], createdAt: now - day },
+    ],
+    outfitSeq: 3,
+    wishlist: [
+      { id: 'w1', name: 'Men Linen Regular Fit Shirt', site: 'Myntra', url: 'https://www.myntra.com/linen-shirts', img: 'svg:shirt:#E9E2D2:', createdAt: now - 2 * day },
+      { id: 'w2', name: 'White Leather Low-Top Sneakers', site: 'Amazon', url: 'https://www.amazon.in/s?k=white+leather+sneakers', img: 'svg:sneaker:#FFFFFF:#C9A27A', createdAt: now - day },
+      { id: 'w3', name: 'Relaxed Fit Jeans', site: 'H&M', url: 'https://www2.hm.com/en_in/men/shop-by-product/jeans.html', img: null, createdAt: now },
+    ],
+    subcats,
+    looks: [
+      { id: 'l1', img: 'look:s1,s9,s15:#EADFD6', tags: ['s1', 's9', 's15', 's20'], sample: true, createdAt: now - 5 * day },
+      { id: 'l2', img: 'look:s2,s11,s17:#DCE3EA', tags: ['s2', 's11', 's17', 's23'], sample: true, createdAt: now - 2 * day },
+    ],
+    settings: { accent: 'plum', v2: true, split: [30, 60, 10], weather: { useLocation: true, city: '', unit: 'C' }, demoWeather: 3 },
+  };
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && s.v === 1) {
+      // Keep items saved before the rename from "watchlist" to "wishlist"
+      if (s.watchlist && !s.wishlist) { s.wishlist = s.watchlist; delete s.watchlist; }
+      s.items.forEach(i => { if (!i.color && i.img && i.img.startsWith('svg:')) i.color = colorOfHex(i.img.split(':')[2]); });
+      // Round 3: plum by default, looks, weather settings
+      if (!s.settings.v2) { s.settings.accent = 'plum'; s.settings.v2 = true; }
+      if (!s.settings.weather) s.settings.weather = { useLocation: true, city: '', unit: 'C' };
+      if (s.settings.demoWeather == null) s.settings.demoWeather = 3;
+      if (!s.looks) s.looks = seed().looks.filter(l => l.tags.every(id => s.items.some(i => i.id === id)));
+      if (!s.subcats) {
+        s.subcats = starterSubs();
+        s.items.forEach(i => { if (!i.sub) i.sub = subForKind(s.subcats, i.cat, i.img.startsWith('svg:') ? i.img.split(':')[1] : ''); });
+      }
+      return s;
+    }
+  } catch (e) {}
+  return null;
+}
+let S = load() || seed();
+let storageWarned = false;
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { if (!storageWarned) { storageWarned = true; toast('Browser storage is full. New changes will reset when you refresh.'); } }
+}
+
+/* ---------- Helpers ---------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const byId = id => S.items.find(i => i.id === id);
+const newest = (a, b) => b.createdAt - a.createdAt;
+const itemsOf = cat => S.items.filter(i => cat === 'all' || i.cat === cat).sort(newest);
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const fmtDate = ts => new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+const initials = n => (n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
+let view = ['home', 'outfits', 'liked', 'wishlist', 'looks', 'stats', 'settings'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
+let tab = 'all';
+let pendingLinks = [];
+
+function applyAccent() {
+  const a = ACCENTS.find(x => x.id === S.settings.accent) || ACCENTS[0];
+  document.documentElement.style.setProperty('--accent', a.c);
+  document.documentElement.style.setProperty('--accent-soft', a.soft);
+}
+
+/* ---------- Rendering ---------- */
+function renderProfile() {
+  const u = S.user;
+  $('#cover').innerHTML = u.cover ? `<img src="${u.cover}" alt="">` : '';
+  $('#weather').innerHTML = weatherHTML();
+  $('#weather').hidden = weatherOff();
+  $('#avatar').innerHTML = u.avatar ? `<img src="${u.avatar}" alt="">` : esc(initials(u.name));
+  $('#pname').textContent = u.name;
+  $('#phandle').textContent = '@' + u.handle;
+  const stats = [[S.items.length, 'items', 'home'], [S.outfits.length, 'outfits', 'outfits'], [S.looks.length, 'looks', 'looks'], [S.items.filter(i => i.liked).length, 'liked', 'liked'], [S.wishlist.length, 'wishlist', 'wishlist']];
+  $('#stats').innerHTML = stats.map(([n, l, v]) => `<button class="stat" data-act="nav" data-view="${v}"><b>${n}</b><span>${l}</span></button>`).join('');
+  $('#quick').innerHTML = [['looks', 'image', 'Lookbooks'], ['stats', 'chart', 'Wardrobe stats'], ['settings', 'sliders', 'Settings']]
+    .map(([v, ic, l]) => `<button data-act="nav" data-view="${v}" aria-label="${l}" title="${l}">${ICON[ic]}</button>`).join('');
+}
+
+const card = it => `<div class="card" data-act="item" data-id="${it.id}" role="button" tabindex="0" aria-label="${ONE[it.cat]}, open details">
+  <img src="${imgSrc(it.img)}" alt="" loading="lazy">
+  <button class="heart${it.liked ? ' on' : ''}" data-act="like" data-id="${it.id}" aria-pressed="${it.liked}" aria-label="${it.liked ? 'Remove from liked' : 'Add to liked'}">${ICON.heart}</button>
+</div>`;
+
+const empty = (title, text, btn) => `<div class="empty"><h3>${title}</h3><div>${text}</div>${btn || ''}</div>`;
+
+const NO_FILTERS = () => ({ colors: [], subs: [], liked: false, unused: false, sort: 'newest' });
+const subsOf = cat => S.subcats.filter(s => s.cat === cat);
+const subById = id => S.subcats.find(s => s.id === id);
+const subName = id => (subById(id) || { name: 'Unsorted' }).name;
+function addSub(cat, raw, exceptId) {
+  const name = (raw || '').trim().replace(/\s+/g, ' ');
+  if (!name) return { error: 'Type a name first.' };
+  if (subsOf(cat).some(s => s.id !== exceptId && s.name.toLowerCase() === name.toLowerCase())) return { error: `"${name}" already exists in ${LABEL[cat]}.` };
+  if (exceptId) { subById(exceptId).name = name; save(); return { id: exceptId }; }
+  const s = { id: uid('sc'), cat, name }; S.subcats.push(s); save(); return { id: s.id };
+}
+// Chips to pick one subcategory, plus "+ New" that opens an inline form
+function subPicker(cat, selected, act, adding, err) {
+  return `<div class="chips">${subsOf(cat).map(s => `<button class="chip${s.id === selected ? ' on' : ''}" data-act="${act}" data-id="${s.id}" aria-pressed="${s.id === selected}">${esc(s.name)}</button>`).join('')}<button class="chip" data-act="${act}-new">+ New</button></div>
+    ${adding ? `<form class="wl-form" data-sub-form="${act}" data-cat="${cat}" style="margin-top:10px" novalidate><input id="new-sub" type="text" maxlength="24" placeholder="e.g. Kurtas" aria-label="New subcategory name"><button class="btn btn-primary" type="submit">Add</button></form>${err ? `<p class="wl-err">${esc(err)}</p>` : ''}` : ''}`;
+}
+let filters = NO_FILTERS();
+const usedIds = () => new Set(S.outfits.flatMap(o => [o.top, o.bottom, o.shoes, ...o.acc]));
+function applyFilters(list) {
+  const used = filters.unused ? usedIds() : null;
+  const out = list.filter(i => (!filters.colors.length || filters.colors.includes(i.color)) && (!filters.subs.length || filters.subs.includes(i.sub)) && (!filters.liked || i.liked) && (!used || !used.has(i.id)));
+  return filters.sort === 'oldest' ? out.reverse() : out;
+}
+const filterCount = () => filters.colors.length + filters.subs.length + (filters.liked ? 1 : 0) + (filters.unused ? 1 : 0) + (filters.sort === 'oldest' ? 1 : 0);
+const colorOpt = (c, on, act, extra = '') => `<button class="color-opt${on ? ' on' : ''}" data-act="${act}" data-id="${c.id}"${extra} aria-pressed="${on}"><i style="background:${c.hex}"></i>${c.name}</button>`;
+const switchRow = (act, label, on) => `<button class="switch-row" role="switch" aria-checked="${on}" data-act="${act}"><span>${label}</span><span class="switch"></span></button>`;
+
+function homeHTML() {
+  const tabs = [['all', 'All'], ...CATS.map(c => [c, LABEL[c]])];
+  const all = itemsOf(tab), list = applyFilters(all), nf = filterCount();
+  return `<div class="tabs-bar"><div class="wrap"><div class="tabs" role="tablist">${tabs.map(([id, label]) =>
+    `<button class="tab${tab === id ? ' on' : ''}" role="tab" aria-selected="${tab === id}" data-act="tab" data-tab="${id}"><span class="tab-img"><img src="${TAB_IMG[id]}" alt=""></span><span class="tab-label">${label}</span></button>`).join('')}
+  </div></div></div>
+  <section class="wrap">
+    <div class="section-head"><h2>${tab === 'all' ? 'All clothes' : LABEL[tab]}</h2><div class="head-right"><span class="muted">${nf ? `${list.length} of ${all.length}` : all.length} ${all.length === 1 ? 'item' : 'items'}</span>${all.length ? `<button class="filter-btn${nf ? ' on' : ''}" data-act="filters">${ICON.sliders}Filter${nf ? `<span class="badge">${nf}</span>` : ''}</button>` : ''}</div></div>
+    ${list.length ? `<div class="grid">${list.map(card).join('')}</div>`
+      : all.length ? empty('No items match', 'Try removing a filter.', `<button class="btn btn-ghost" data-act="clear-filters">Clear filters</button>`)
+      : empty(`No ${tab === 'all' ? 'clothes' : LABEL[tab].toLowerCase()} yet`, 'Add a photo from your gallery and it will show up here.', `<button class="btn btn-primary" data-act="upload"${tab !== 'all' ? ` data-cat="${tab}"` : ''}>${ICON.camera} Add clothes</button>`)}
+  </section>`;
+}
+
+function figure(o) {
+  const slot = (id, cls) => {
+    if (!id) return `<div class="slot ${cls}"></div>`;
+    const it = byId(id);
+    return it ? `<div class="slot ${cls}"><img src="${imgSrc(it.img)}" alt=""></div>` : `<div class="slot ${cls} gone"><span>Removed</span></div>`;
+  };
+  const acc = o.acc.map(byId).filter(Boolean);
+  return `<div class="figure">${slot(o.top, 't')}${slot(o.bottom, 'b')}${slot(o.shoes, 's')}
+    ${acc.length ? `<div class="acc-col">${acc.map(a => `<span><img src="${imgSrc(a.img)}" alt=""></span>`).join('')}</div>` : ''}</div>`;
+}
+
+const outfitCard = o => `<div class="outfit" data-act="outfit" data-id="${o.id}" role="button" tabindex="0" aria-label="Outfit, open details">${figure(o)}
+  <button class="heart${o.liked ? ' on' : ''}" data-act="like-outfit" data-id="${o.id}" aria-pressed="${!!o.liked}" aria-label="${o.liked ? 'Remove from favorites' : 'Add to favorites'}">${ICON.heart}</button></div>`;
+
+function filterSheet(still) {
+  const base = itemsOf(tab);
+  const present = COLORS.filter(c => base.some(i => i.color === c.id));
+  const n = applyFilters(base).length;
+  openSheet(`<h2 tabindex="-1">Filter</h2><p class="sub">${tab === 'all' ? 'All clothes' : LABEL[tab]}</p>
+    <div class="field" style="margin-top:0"><label>Color</label>${present.length ? `<div class="color-grid">${present.map(c => colorOpt(c, filters.colors.includes(c.id), 'f-color')).join('')}</div>` : '<p class="hint">No colors yet.</p>'}</div>
+    ${(() => { const ps = S.subcats.filter(s => base.some(i => i.sub === s.id)); return ps.length ? `<div class="field"><label>Subcategory</label><div class="chips">${ps.map(s => `<button class="chip${filters.subs.includes(s.id) ? ' on' : ''}" data-act="f-sub" data-id="${s.id}" aria-pressed="${filters.subs.includes(s.id)}">${esc(s.name)}</button>`).join('')}</div></div>` : ''; })()}
+    <div class="field"><label>Show</label></div>
+    ${switchRow('f-liked', 'Liked only', filters.liked)}
+    ${switchRow('f-unused', 'Not in any outfit', filters.unused)}
+    <div class="field"><label>Sort</label><div class="seg" role="group" aria-label="Sort"><button class="${filters.sort === 'newest' ? 'on' : ''}" data-act="f-sort" data-id="newest">Newest first</button><button class="${filters.sort === 'oldest' ? 'on' : ''}" data-act="f-sort" data-id="oldest">Oldest first</button></div></div>
+    <div class="sheet-actions"><button class="btn btn-ghost" data-act="clear-filters">Clear all</button><button class="btn btn-primary" data-act="close-sheet">Show ${n} ${n === 1 ? 'item' : 'items'}</button></div>`, still);
+}
+
+function outfitsHTML() {
+  const list = [...S.outfits].sort(newest);
+  return `<section class="wrap">
+    <div class="subhead no-back"><h1>My outfits</h1><button class="btn btn-primary" data-act="builder">${ICON.plus} Create outfit</button></div>
+    <p class="page-note">${list.length} saved ${list.length === 1 ? 'outfit' : 'outfits'}. Pick one for today.</p>
+    ${weatherCard()}
+    ${list.length ? `<div class="ogrid">${list.map(outfitCard).join('')}</div>`
+      : empty('No outfits yet', 'Mix your tops, bottoms and shoes, then save the combinations you like.', `<button class="btn btn-primary" data-act="builder">Create your first outfit</button>`)}
+  </section>`;
+}
+
+let likedSeg = 'clothes';
+function likedHTML() {
+  const items = S.items.filter(i => i.liked).sort(newest);
+  const outs = S.outfits.filter(o => o.liked).sort(newest);
+  return `<section class="wrap">
+    <div class="page-head"><div><h1>Liked</h1><p>The pieces and outfits you keep coming back to.</p></div></div>
+    <div class="seg" role="group" aria-label="Show"><button class="${likedSeg === 'clothes' ? 'on' : ''}" data-act="liked-seg" data-id="clothes">Clothes · ${items.length}</button><button class="${likedSeg === 'outfits' ? 'on' : ''}" data-act="liked-seg" data-id="outfits">Outfits · ${outs.length}</button></div>
+    ${likedSeg === 'clothes'
+      ? (items.length ? `<div class="grid">${items.map(card).join('')}</div>` : empty('Nothing liked yet', 'Tap the heart on any item to keep it here.'))
+      : (outs.length ? `<div class="ogrid">${outs.map(outfitCard).join('')}</div>` : empty('No favorite outfits yet', 'Tap the heart under an outfit to keep it here.'))}
+  </section>`;
+}
+
+function wcard(w) {
+  const safe = /^https?:\/\//i.test(w.url) ? w.url : '#';
+  return `<div class="wcard"><a class="wlink" href="${esc(safe)}" target="_blank" rel="noopener noreferrer">
+    ${w.img ? `<div class="wimg"><img src="${esc(imgSrc(w.img))}" alt=""></div>` : `<div class="wimg fallback"><span class="wsite-big">${esc(w.site)}</span><span class="wnote">No photo</span></div>`}
+    <div class="wbody"><span class="wname">${esc(w.name)}</span><span class="wsite">${esc(w.site)} ${ICON.ext}</span></div></a>
+    <button class="wremove" data-act="wl-remove" data-id="${w.id}" aria-label="Remove from wishlist">${ICON.x}</button></div>`;
+}
+
+function wishHTML() {
+  const list = [...S.wishlist].sort(newest);
+  const pend = pendingLinks.map(p => `<div class="wcard wpending"><div class="wimg"><div class="spinner"></div></div><div class="wbody"><span class="wname">Getting details…</span><span class="wsite">${esc(p.site)}</span></div></div>`).join('');
+  return `<section class="wrap">
+    <div class="page-head"><div><h1>Wishlist</h1><p>Clothes you want to buy. Tap one to open it on the shop's website.</p></div></div>
+    <form class="wl-form" id="wl-form" novalidate>
+      <input id="wl-url" type="url" inputmode="url" autocomplete="off" placeholder="Paste a product link (Myntra, Amazon…)" aria-label="Product link">
+      <button class="btn btn-primary" type="submit">Add</button>
+    </form>
+    <p class="wl-err" id="wl-err" hidden></p>
+    <p class="wl-note">Prototype: this page can't reach shop websites, so new links show the shop and product name only. In the real app the server fetches the photo.</p>
+    ${list.length || pend ? `<div class="grid">${pend}${list.map(wcard).join('')}</div>` : empty('Your wishlist is empty', 'Paste a link to a product you like and it will be saved here.')}
+  </section>`;
+}
+
+const subhead = (title, extra = '') => `<div class="subhead"><button class="icon-btn" data-act="nav" data-view="home" aria-label="Back to closet">${ICON.back}</button><h1>${title}</h1>${extra}</div>`;
+
+/* ---------- Weather (pretend in the prototype; the real app uses browser location + Open-Meteo) ---------- */
+const DEMO_WEATHER = [
+  { t: 6, icon: 'cloud', d: 'Cloudy' }, { t: 15, icon: 'cloud', d: 'Partly cloudy' }, { t: 23, icon: 'sun', d: 'Clear' },
+  { t: 31, icon: 'sun', d: 'Sunny' }, { t: 38, icon: 'sun', d: 'Heatwave' }, { t: 24, icon: 'rain', d: 'Rain' },
+];
+function weatherMsg(w) {
+  if (w.icon === 'rain') return 'Rain on the way. Skip suede and light bottoms today.';
+  if (w.t <= 10) return 'Cold out. Layer up with a hoodie or jacket.';
+  if (w.t <= 18) return 'Cool and easy. Full sleeves or a light layer.';
+  if (w.t <= 26) return 'Perfect weather. Tee and jeans territory.';
+  if (w.t <= 33) return 'Warm one. Breathable cotton, lighter colours.';
+  return 'Scorching. Linen, shorts, nothing dark.';
+}
+const weatherOff = () => !S.settings.weather.useLocation && !S.settings.weather.city;
+const currentWeather = () => DEMO_WEATHER[S.settings.demoWeather] || DEMO_WEATHER[3];
+const tempText = w => S.settings.weather.unit === 'F' ? Math.round(w.t * 9 / 5 + 32) + '°F' : w.t + '°C';
+// Small pill on the cover photo: icon + temperature only
+function weatherHTML() {
+  if (weatherOff()) return '';
+  const w = currentWeather();
+  return `<span class="w-icon">${ICON[w.icon]}</span><span class="w-temp">${tempText(w)}</span>`;
+}
+// Full card on the Outfits page, so outfits can be picked for the weather
+function weatherCard() {
+  if (weatherOff()) return `<div class="wx-card"><span class="w-icon">${ICON.cloud}</span><div>Add your city in <button class="link-btn" style="margin:0" data-act="nav" data-view="settings">Settings</button> to see today's weather here.</div></div>`;
+  const w = currentWeather(), city = S.settings.weather.city;
+  return `<div class="wx-card"><span class="w-icon">${ICON[w.icon]}</span><div><span class="w-temp">${tempText(w)}</span> <span class="w-place">${w.d}${city ? ' · ' + esc(city) : ''}</span><span class="w-msg">${weatherMsg(w)}</span></div></div>`;
+}
+
+/* ---------- My looks ---------- */
+function looksHTML() {
+  const list = [...S.looks].sort(newest);
+  return `<section class="wrap">${subhead('Lookbooks', `<button class="btn btn-primary" data-act="add-look">${ICON.plus} Add look</button>`)}
+    <p class="page-note">Photos of you wearing your clothes. Tag the pieces in each photo.</p>
+    ${list.length ? `<div class="lgrid">${list.map(l => {
+      const n = l.tags.filter(byId).length;
+      return `<div class="look" data-act="look" data-id="${l.id}" role="button" tabindex="0" aria-label="Look, open details"><img src="${imgSrc(l.img)}" alt="" loading="lazy">${l.sample ? '<span class="l-badge t">Sample</span>' : ''}${n ? `<span class="l-badge b">${n} tagged</span>` : ''}</div>`;
+    }).join('')}</div>`
+      : empty('Your lookbook is empty', 'Add a photo of you in an outfit you love.', `<button class="btn btn-primary" data-act="add-look">Add your first look</button>`)}
+  </section>`;
+}
+let lookDraft = null; // { id?, img?, tags: Set, cat }
+const lookSaveLabel = () => lookDraft.tags.size ? `Save with ${lookDraft.tags.size} tagged` : 'Save look';
+function lookTagSheet(still) {
+  const d = lookDraft;
+  openSheet(`<h2 tabindex="-1">${d.id ? 'Tag clothes' : 'New look'}</h2><p class="sub">Tap the clothes you're wearing in this photo. You can skip this.</p>
+    ${d.img ? `<div class="look-photo" style="margin-top:0"><img src="${d.img}" alt="Your photo" style="max-height:34dvh"></div>` : ''}
+    <div class="chips chip-tabs" style="margin:14px 0 12px">${['all', ...CATS].map(c => `<button class="chip${d.cat === c ? ' on' : ''}" data-act="lt-cat" data-id="${c}">${c === 'all' ? 'All' : LABEL[c]}</button>`).join('')}</div>
+    <div class="pick-grid" style="grid-template-columns:repeat(4,1fr)">${itemsOf(d.cat).map(a => `<button class="pick${d.tags.has(a.id) ? ' on' : ''}" data-act="lt-toggle" data-id="${a.id}" aria-pressed="${d.tags.has(a.id)}"><img src="${imgSrc(a.img)}" alt="${ONE[a.cat]}"><span class="tick">${ICON.check}</span></button>`).join('')}</div>
+    <div class="sheet-actions"><button class="btn btn-ghost" data-act="close-sheet">Cancel</button><button class="btn btn-primary" data-act="look-save" id="look-save">${lookSaveLabel()}</button></div>`, still);
+}
+function lookSheet(id, confirming) {
+  const l = S.looks.find(x => x.id === id); if (!l) return closeSheet();
+  const tags = l.tags.map(byId).filter(Boolean);
+  openSheet(`<span class="eyebrow">Lookbook</span><h2 tabindex="-1">Look</h2>
+    <div class="look-photo"><img src="${imgSrc(l.img)}" alt="Your look"></div>
+    <div class="field"><label>Tagged clothes</label>${tags.length ? `<div class="tag-strip">${tags.map(it => `<button data-act="item" data-id="${it.id}" aria-label="${ONE[it.cat]}, open details"><img src="${imgSrc(it.img)}" alt=""></button>`).join('')}</div>` : '<p class="hint" style="margin:0">Nothing tagged yet.</p>'}</div>
+    ${confirming ? `<div class="confirm"><p>Delete this look? Your clothes stay in your closet.</p><div class="row"><button class="btn btn-ghost" data-act="look" data-id="${id}">Cancel</button><button class="btn btn-danger" data-act="look-delete" data-id="${id}">Delete</button></div></div>`
+      : `<div class="sheet-actions"><button class="btn btn-ghost" data-act="look-ask-delete" data-id="${id}">${ICON.trash} Delete</button><button class="btn btn-primary" data-act="look-tags" data-id="${id}">${ICON.pen} Tag clothes</button></div>`}`);
+}
+$('#file-look').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const img = await loadImage(file);
+    lookDraft = { img: toCanvas(img, 720).toDataURL('image/jpeg', .8), tags: new Set(), cat: 'all' };
+    lookTagSheet();
+  } catch (err) { toast("Couldn't open that photo. Try a JPG or PNG."); }
+});
+
+/* ---------- Wardrobe stats ---------- */
+let statTab = 'all';
+const tally = (arr, f) => [...arr.reduce((m, x) => m.set(f(x), (m.get(f(x)) || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
+function donutSVG(rows, total) {
+  const cx = 100, cy = 100, r1 = 94, r0 = 64;
+  const pt = (r, a) => `${(cx + r * Math.sin(a)).toFixed(2)} ${(cy - r * Math.cos(a)).toFixed(2)}`;
+  const arc = (a0, a1) => { const l = a1 - a0 > Math.PI ? 1 : 0; return `M${pt(r1, a0)} A${r1} ${r1} 0 ${l} 1 ${pt(r1, a1)} L${pt(r0, a1)} A${r0} ${r0} 0 ${l} 0 ${pt(r0, a0)}Z`; };
+  let a = 0, out = '';
+  rows.forEach(r => {
+    const span = r.n / total * Math.PI * 2, gap = rows.length > 1 ? Math.min(.02, span / 4) : 0;
+    const tip = `${r.c.name}: ${r.n} ${r.n === 1 ? 'item' : 'items'} (${Math.round(r.n / total * 100)}%)`;
+    const d = rows.length === 1 ? arc(0, Math.PI) + arc(Math.PI, Math.PI * 2 - .0001) : arc(a + gap, a + span - gap);
+    out += `<path d="${d}" fill="${r.c.hex}" stroke="rgba(0,0,0,.14)" stroke-width="1" data-tip="${tip}"/>`;
+    a += span;
+  });
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="Colour breakdown, listed in the legend">${out}</svg>`;
+}
+function statsHTML() {
+  const all = S.items, list = itemsOf(statTab), total = list.length;
+  const rows = tally(list, i => i.color || '').map(([id, n]) => ({ c: colorById(id), n }));
+  const pct = n => total ? Math.round(n / total * 100) : 0;
+  const catRows = CATS.map(c => [c, all.filter(i => i.cat === c).length]);
+  const maxCat = Math.max(1, ...catRows.map(r => r[1]));
+  const count = c => all.filter(i => i.cat === c).length;
+  const possible = count('top') * count('bottom') * Math.max(1, count('shoes'));
+  const used = usedIds(), inOutfit = all.filter(i => used.has(i.id)).length, usePct = all.length ? Math.round(inOutfit / all.length * 100) : 0;
+  const inOutfits = id => S.outfits.filter(o => [o.top, o.bottom, o.shoes, ...o.acc].includes(id)).length;
+  const inLooks = id => S.looks.filter(l => l.tags.includes(id)).length;
+  const star = all.map(i => ({ i, o: inOutfits(i.id), l: inLooks(i.id) })).sort((a, b) => (b.o + b.l) - (a.o + a.l) || b.i.createdAt - a.i.createdAt)[0];
+  const NEUTRALS = ['black', 'white', 'grey', 'beige', 'navy', 'brown'];
+  const neutralPct = all.length ? Math.round(all.filter(i => NEUTRALS.includes(i.color)).length / all.length * 100) : 0;
+  const top3 = tally(all, i => i.color || '').slice(0, 3).map(([id]) => colorById(id));
+  const shops = tally(S.wishlist, w => w.site);
+  const tabs = [['all', 'All'], ...CATS.map(c => [c, LABEL[c]])];
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  return `<section class="wrap">${subhead('Wardrobe stats')}
+  <div class="scards">
+    <div class="scard wide">
+      <div><h2>Wardrobe composition</h2><p class="sub">Colours in your ${statTab === 'all' ? 'closet' : LABEL[statTab].toLowerCase()}</p></div>
+      <div class="chips chip-tabs" role="tablist">${tabs.map(([id, l]) => `<button class="chip${statTab === id ? ' on' : ''}" role="tab" aria-selected="${statTab === id}" data-act="stat-tab" data-id="${id}">${l}</button>`).join('')}</div>
+      ${total ? `<div class="donut-wrap"><div class="donut">${donutSVG(rows, total)}<div class="center"><b>${total}</b><span>${total === 1 ? 'item' : 'items'}</span></div></div>
+        <ul class="legend">${rows.map(r => `<li><span class="sw" style="background:${r.c.hex}"></span><span>${r.c.name}</span><span class="n">${r.n}</span><span class="p">${pct(r.n)}%</span></li>`).join('')}</ul></div>`
+        : `<p class="hint" style="margin:0">No ${statTab === 'all' ? 'clothes' : LABEL[statTab].toLowerCase()} yet.</p>`}
+      ${statTab !== 'all' && total ? (() => {
+        const sr = tally(list, i => i.sub).map(([sid, n]) => [subName(sid), n]), mx = Math.max(1, ...sr.map(r => r[1]));
+        return `<div><h3>By subcategory</h3><div class="bars">${sr.map(([nm, n]) => `<div class="bar-row" data-tip="${esc(nm)}: ${plural(n, 'item', 'items')} (${pct(n)}%)"><span>${esc(nm)}</span><span class="bar-track"><span class="bar-fill" style="width:${n / mx * 100}%"></span></span><span class="n">${n}</span></div>`).join('')}</div></div>`;
+      })() : ''}
+      ${statTab === 'all' && all.length ? `<div><h3>By category</h3><div class="bars">${catRows.map(([c, n]) => `<div class="bar-row" data-tip="${LABEL[c]}: ${plural(n, 'item', 'items')} (${Math.round(n / all.length * 100)}%)"><span>${LABEL[c]}</span><span class="bar-track"><span class="bar-fill" style="width:${n / maxCat * 100}%"></span></span><span class="n">${n}</span></div>`).join('')}</div></div>` : ''}
+    </div>
+    <div class="scard">
+      <div><h2>Outfit potential</h2><p class="sub">Every top, bottom and shoe combination you could make</p></div>
+      <div class="kpis"><div class="kpi"><b>${possible.toLocaleString('en-IN')}</b><span>possible</span></div><div class="kpi"><b>${S.outfits.length}</b><span>saved</span></div><div class="kpi"><b>${S.looks.length}</b><span>looks</span></div></div>
+    </div>
+    <div class="scard">
+      <div><h2>Closet in use</h2><p class="sub">${usePct}% of your clothes are in at least one outfit</p></div>
+      <div class="meter" data-tip="${inOutfit} of ${plural(all.length, 'item', 'items')} in outfits"><i style="width:${usePct}%"></i></div>
+      ${all.length - inOutfit ? `<div style="font-size:14px">${plural(all.length - inOutfit, 'piece has', 'pieces have')} never been styled.<button class="link-btn" data-act="see-unused">See them</button></div>` : '<div style="font-size:14px">Every piece is in an outfit. Nice.</div>'}
+    </div>
+    ${star && star.o + star.l ? `<div class="scard"><div><h2>Most styled</h2><p class="sub">The piece you reach for most</p></div>
+      <button class="spot" data-act="item" data-id="${star.i.id}" style="text-align:left"><span class="th"><img src="${imgSrc(star.i.img)}" alt=""></span><span><b style="font-weight:600">${colorById(star.i.color).name} ${ONE[star.i.cat].toLowerCase()}</b><span class="muted" style="display:block;font-size:13px">In ${plural(star.o, 'outfit', 'outfits')} and ${plural(star.l, 'look', 'looks')}</span></span></button></div>` : ''}
+    <div class="scard">
+      <div><h2>Your palette</h2><p class="sub">${neutralPct >= 60 ? `Mostly neutrals (${neutralPct}%). One bold piece would add range.` : `A good mix: ${neutralPct}% neutrals, the rest colour.`}</p></div>
+      <div class="chips">${top3.map(c => `<span class="pal-chip"><span class="dot" style="background:${c.hex}"></span>${c.name}</span>`).join('')}</div>
+    </div>
+    <div class="scard">
+      <div><h2>Wishlist</h2><p class="sub">${plural(S.wishlist.length, 'item', 'items')} saved${shops.length ? `, most from ${esc(shops[0][0])}` : ''}</p></div>
+      <div><button class="btn btn-ghost" data-act="nav" data-view="wishlist">Open wishlist</button></div>
+    </div>
+  </div></section>`;
+}
+
+/* ---------- Settings ---------- */
+function settingsHTML() {
+  const w = S.settings.weather;
+  return `<section class="wrap">${subhead('Settings')}
+    <div class="set-group"><h2>Appearance</h2>
+      <div class="set-row"><div class="field" style="margin-top:0"><label>Accent colour</label><div class="swatches">${ACCENTS.map(a => `<button class="swatch${S.settings.accent === a.id ? ' on' : ''}" data-act="accent" data-id="${a.id}" aria-pressed="${S.settings.accent === a.id}"><i style="background:${a.c}"></i>${a.name}</button>`).join('')}</div></div></div>
+    </div>
+    <div class="set-group"><h2>Weather</h2>
+      <div class="set-row">${switchRow('w-loc', 'Use my location', w.useLocation)}<small>The app asks your browser for your location once. If you say no, it uses the city below.</small></div>
+      <div class="set-row"><div class="field" style="margin-top:0"><label for="set-city">City</label><input type="text" id="set-city" placeholder="e.g. Jaipur" value="${esc(w.city)}" maxlength="40" autocomplete="address-level2"></div><small>Used when location is off or not allowed. Press Enter to save.</small></div>
+      <div class="set-row"><div class="field" style="margin-top:0"><label>Temperature</label><div class="seg" role="group" aria-label="Temperature unit"><button class="${w.unit === 'C' ? 'on' : ''}" data-act="w-unit" data-id="C">°C</button><button class="${w.unit === 'F' ? 'on' : ''}" data-act="w-unit" data-id="F">°F</button></div></div></div>
+    </div>
+    <div class="set-group"><h2>Profile</h2>
+      <div class="set-row"><button class="btn btn-ghost" data-act="edit-profile">${ICON.pen} Edit profile</button></div>
+    </div>
+    <div class="set-group"><h2>Subcategories</h2>
+      ${CATS.map(c => `<div class="set-row"><div class="field" style="margin-top:0"><label>${LABEL[c]}</label><div class="chips">${subsOf(c).map(s => `<button class="chip" data-act="sub-edit" data-id="${s.id}">${esc(s.name)} <span class="muted">${S.items.filter(i => i.sub === s.id).length}</span></button>`).join('')}<button class="chip" data-act="sub-add" data-id="${c}">+ Add</button></div></div></div>`).join('')}
+    </div>
+    <div class="set-group"><h2>Account</h2>
+      <div class="set-row"><button class="btn btn-ghost danger-text" data-act="del-account">${ICON.trash} Delete account</button><small>Deletes your clothes, outfits, looks, wishlist and photos for good.</small></div>
+      <div class="set-row"><button class="btn btn-ghost" disabled>Log out</button><small>Login comes with the real app.</small></div>
+    </div>
+  </section>`;
+}
+document.addEventListener('change', e => {
+  if (e.target.id !== 'set-city') return;
+  S.settings.weather.city = e.target.value.trim(); save();
+  toast(S.settings.weather.city ? `City set to ${S.settings.weather.city}` : 'City cleared');
+});
+
+/* ---------- Chart tooltips ---------- */
+const tipEl = document.createElement('div'); tipEl.className = 'tip'; tipEl.hidden = true; document.body.appendChild(tipEl);
+function showTip(e) {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (!t) { tipEl.hidden = true; return; }
+  tipEl.textContent = t.dataset.tip;
+  tipEl.style.left = Math.min(innerWidth - 90, Math.max(90, e.clientX)) + 'px';
+  tipEl.style.top = e.clientY + 'px';
+  tipEl.hidden = false;
+}
+document.addEventListener('pointermove', showTip);
+document.addEventListener('pointerdown', showTip);
+addEventListener('scroll', () => { tipEl.hidden = true; }, { passive: true });
+
+function renderNav() {
+  const labels = { home: ['home', 'Home'], outfits: ['hanger', 'Outfits'], liked: ['heart', 'Liked'], wishlist: ['bookmark', 'Wishlist'] };
+  document.querySelectorAll('.bn-item').forEach(b => {
+    const [ic, l] = labels[b.dataset.view];
+    b.innerHTML = ICON[ic] + `<span>${l}</span>`;
+    b.classList.toggle('on', b.dataset.view === view);
+    b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false');
+  });
+  $('.bn-plus').innerHTML = ICON.plus;
+  $('.proto-chip').textContent = 'Prototype';
+}
+
+function render() {
+  renderNav();
+  $('#profile').hidden = view !== 'home';
+  if (view === 'home') renderProfile();
+  $('#view').innerHTML = ({ home: homeHTML, outfits: outfitsHTML, liked: likedHTML, wishlist: wishHTML, looks: looksHTML, stats: statsHTML, settings: settingsHTML })[view]();
+}
+
+function go(v) {
+  if (v !== view) { view = v; try { history.replaceState(null, '', '#' + v); } catch (e) {} window.scrollTo(0, 0); }
+  render();
+}
+
+/* ---------- Toast ---------- */
+let toastTimer;
+function toast(msg, undo) {
+  const t = $('#toast');
+  t.innerHTML = `<div class="toast"><span>${esc(msg)}</span>${undo ? '<button type="button" id="undo">Undo</button>' : ''}</div>`;
+  if (undo) $('#undo').onclick = () => { undo(); t.innerHTML = ''; };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.innerHTML = ''; }, undo ? 5000 : 2600);
+}
+
+/* ---------- Sheets ---------- */
+let lastFocus = null;
+// `still` re-renders an open sheet in place: no animation, same scroll and focus
+function openSheet(html, still) {
+  const root = $('#sheet-root');
+  if (root.hidden) { lastFocus = document.activeElement; still = false; }
+  const prev = root.querySelector('.sheet'), top = still && prev ? prev.scrollTop : 0;
+  const a = document.activeElement, key = still && a && a.dataset && a.dataset.act ? [a.dataset.act, a.dataset.id || ''] : null;
+  const st = still ? ' still' : '';
+  root.innerHTML = `<div class="backdrop${st}" data-act="close-sheet"></div><div class="sheet${st}" role="dialog" aria-modal="true"><button class="sheet-x" data-act="close-sheet" aria-label="Close">${ICON.x}</button>${html}</div>`;
+  root.hidden = false;
+  document.body.classList.add('lock');
+  if (still) {
+    root.querySelector('.sheet').scrollTop = top;
+    const el = key && [...root.querySelectorAll(`[data-act="${key[0]}"]`)].find(x => (x.dataset.id || '') === key[1]);
+    if (el) el.focus({ preventScroll: true });
+    return;
+  }
+  const f = root.querySelector('.sheet input[type="text"], .sheet h2');
+  if (f) { f.tabIndex = f.tabIndex < 0 ? -1 : f.tabIndex; f.focus({ preventScroll: true }); }
+}
+function closeSheet() {
+  const root = $('#sheet-root');
+  root.hidden = true; root.innerHTML = '';
+  up = null;
+  if ($('#builder').hidden) document.body.classList.remove('lock');
+  if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
+}
+
+function plusSheet() {
+  const row = (act, icon, title, text) => `<button class="action-row" data-act="${act}"><span class="ar-icon">${ICON[icon]}</span><span><b>${title}</b><small>${text}</small></span></button>`;
+  openSheet(`<h2 tabindex="-1">Add</h2><p class="sub">What do you want to do?</p><div class="action-list">
+    ${row('upload', 'camera', 'Upload clothes', 'Add a photo from your gallery. The background is removed for you.')}
+    ${row('builder', 'hanger', 'Create outfit', 'Scroll through your tops, bottoms and shoes to find a combination.')}
+    ${row('go-wish', 'link', 'Add to wishlist', 'Save a product link from any shopping site.')}
+  </div>`);
+}
+
+let curItem = null, itemSubAdding = false, itemSubErr = '';
+function itemSheet(id, mode, still) {
+  const it = byId(id); if (!it) return closeSheet();
+  curItem = id;
+  const used = S.outfits.filter(o => [o.top, o.bottom, o.shoes, ...o.acc].includes(id)).length;
+  const looksN = S.looks.filter(l => l.tags.includes(id)).length;
+  const col = colorById(it.color);
+  const where = [used && `${used} ${used === 1 ? 'outfit' : 'outfits'}`, looksN && `${looksN} ${looksN === 1 ? 'look' : 'looks'}`].filter(Boolean).join(' and ');
+  // Deleting is blocked while the item is used anywhere
+  const confirmBox = where
+    ? `<div class="confirm"><p>This ${ONE[it.cat].toLowerCase()} is in ${where}. Remove it from ${used + looksN === 1 ? 'there' : 'those'} first, then delete it.</p>
+      <div class="row"><button class="btn btn-ghost" data-act="item" data-id="${id}">OK</button><button class="btn btn-primary" data-act="nav" data-view="${used ? 'outfits' : 'looks'}">Open ${used ? 'outfits' : 'lookbooks'}</button></div></div>`
+    : `<div class="confirm"><p>Delete this ${ONE[it.cat].toLowerCase()}? This can't be undone in the real app.</p>
+      <div class="row"><button class="btn btn-ghost" data-act="item" data-id="${id}">Cancel</button><button class="btn btn-danger" data-act="item-delete" data-id="${id}">Delete</button></div></div>`;
+  openSheet(`<span class="eyebrow">${LABEL[it.cat]}</span><h2 tabindex="-1">${esc(subName(it.sub))}</h2>
+    <div class="detail-img"><img src="${imgSrc(it.img)}" alt=""></div>
+    <dl class="facts">
+      <dt>Subcategory</dt><dd>${esc(subName(it.sub))}<button class="link-btn" data-act="item-sub-open" data-id="${id}">Change</button></dd>
+      <dt>Color</dt><dd><span class="fact-color"><span class="dot" style="background:${col.hex}"></span>${col.name}<button class="link-btn" data-act="item-color-open" data-id="${id}">Change</button></span></dd>
+      <dt>In outfits</dt><dd>${used}</dd><dt>In looks</dt><dd>${S.looks.filter(l => l.tags.includes(id)).length}</dd></dl>
+    ${mode === 'color' ? `<div class="color-grid" style="margin-top:14px">${COLORS.map(c => colorOpt(c, c.id === it.color, 'item-color', ` data-item="${id}"`)).join('')}</div>` : ''}
+    ${mode === 'sub' ? `<div style="margin-top:14px">${subPicker(it.cat, it.sub, 'item-sub', itemSubAdding, itemSubErr)}</div>` : ''}
+    ${mode === 'confirm' ? confirmBox
+    : `<div class="sheet-actions"><button class="btn btn-ghost" data-act="item-ask-delete" data-id="${id}">${ICON.trash} Delete</button>
+      <button class="btn btn-primary" data-act="like-sheet" data-id="${id}">${it.liked ? ICON.heart.replace('<path', '<path class="fill"') : ICON.heart} ${it.liked ? 'Liked' : 'Like'}</button></div>`}`, still);
+}
+
+function outfitSheet(id, confirming, still) {
+  const o = S.outfits.find(x => x.id === id); if (!o) return closeSheet();
+  const pieces = [['top', o.top], ['bottom', o.bottom], ['shoes', o.shoes], ...o.acc.map(a => ['acc', a])].filter(p => p[1]);
+  openSheet(`<h2 tabindex="-1">Outfit</h2>
+    <div class="big-figure">${figure(o)}</div>
+    <div class="pieces">${pieces.map(([c, pid]) => { const it = byId(pid); return `<div class="piece"><span class="th">${it ? `<img src="${imgSrc(it.img)}" alt="">` : ''}</span><span>${ONE[c]}${it ? '' : ' <span class="muted">(deleted)</span>'}</span></div>`; }).join('')}</div>
+    ${confirming ? `<div class="confirm"><p>Delete this outfit? Your clothes stay in your closet.</p>
+      <div class="row"><button class="btn btn-ghost" data-act="outfit" data-id="${id}">Cancel</button><button class="btn btn-danger" data-act="outfit-delete" data-id="${id}">Delete</button></div></div>`
+    : `<div class="sheet-actions three">
+        <button class="btn btn-ghost" data-act="like-outfit-sheet" data-id="${id}" aria-pressed="${!!o.liked}">${o.liked ? ICON.heart.replace('<path', '<path class="fill"') : ICON.heart} ${o.liked ? 'Favourited' : 'Favourite'}</button>
+        <button class="btn btn-ghost" data-act="edit-outfit" data-id="${id}">${ICON.pen} Edit</button>
+        <button class="btn btn-ghost danger-text" data-act="outfit-ask-delete" data-id="${id}">${ICON.trash} Delete</button>
+      </div>`}`, still);
+}
+
+function profileSheet() {
+  const u = S.user;
+  openSheet(`<h2 tabindex="-1">Edit profile</h2><p class="sub">Shown at the top of your closet.</p>
+    <div class="sheet-actions" style="margin-top:0"><button class="btn btn-ghost" data-act="pick-cover">${ICON.camera} Cover photo</button><button class="btn btn-ghost" data-act="pick-avatar">${ICON.camera} Profile photo</button></div>
+    <div class="field"><label for="pf-name">Name</label><input type="text" id="pf-name" value="${esc(u.name)}" maxlength="40"></div>
+    <div class="field"><label for="pf-handle">Username</label><input type="text" id="pf-handle" value="${esc(u.handle)}" maxlength="24"></div>
+    <div class="sheet-actions"><button class="btn btn-primary btn-block" data-act="save-profile">Save</button></div>`);
+}
+
+function protoSheet(confirmReset) {
+  openSheet(`<span class="eyebrow">Only in the prototype</span><h2 tabindex="-1">Prototype settings</h2>
+    <p class="sub">Try options here before we write the spec.</p>
+    <div class="field"><label>Pretend weather</label><div class="chips">${DEMO_WEATHER.map((w, i) => `<button class="chip${S.settings.demoWeather === i ? ' on' : ''}" data-act="demo-w" data-id="${i}">${w.t}°C ${w.d}</button>`).join('')}</div></div>
+    <div class="divider"></div>
+    <div class="field"><label>What is simulated here</label></div>
+    <ul class="proto-list">
+      <li>Weather is pretend: this page can't read your location or reach a weather service. The real app uses your location and Open-Meteo (free, no key).</li>
+      <li>Background removal works on plain backgrounds only. The real app uses an AI model.</li>
+      <li>Wishlist links can't fetch photos, so they show the shop and name.</li>
+      <li>The two sample looks are drawings. Your own photos work normally.</li>
+      <li>Data is saved in this browser only, not in a database.</li>
+    </ul>
+    <div class="divider"></div>
+    ${confirmReset ? `<div class="confirm" style="margin-top:0"><p>Reset to the sample closet? Everything you added here will be deleted.</p><div class="row"><button class="btn btn-ghost" data-act="proto">Cancel</button><button class="btn btn-danger" data-act="reset">Reset</button></div></div>`
+      : `<button class="btn btn-ghost btn-block" data-act="ask-reset">Reset sample data</button>`}`);
+}
+
+/* ---------- Upload + background removal ---------- */
+let up = null; // { cat, src, result, mode, tol }
+function uploadSheet(cat) {
+  if (cat) { up = { cat }; $('#file-item').value = ''; $('#file-item').click(); return; }
+  openSheet(`<h2 tabindex="-1">Upload clothes</h2><p class="sub">What are you adding?</p>
+    <div class="cat-pick">${CATS.map(c => `<button class="cat-opt" data-act="up-cat" data-cat="${c}"><span class="tab-img"><img src="${TAB_IMG[c]}" alt=""></span><b>${LABEL[c]}</b></button>`).join('')}</div>
+    <p class="hint">Next, choose a photo from your gallery.</p>`);
+}
+
+async function loadImage(file) {
+  const url = URL.createObjectURL(file);
+  try { const img = new Image(); img.src = url; await img.decode(); return img; }
+  finally { setTimeout(() => URL.revokeObjectURL(url), 2000); }
+}
+function toCanvas(src, max) {
+  const s = Math.min(1, max / Math.max(src.width, src.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(src.width * s)); c.height = Math.max(1, Math.round(src.height * s));
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return c;
+}
+function exportImg(canvas, max, type = 'image/webp', q = .85) {
+  const c = Math.max(canvas.width, canvas.height) > max ? toCanvas(canvas, max) : canvas;
+  const url = c.toDataURL(type, q);
+  return url.startsWith('data:' + type) ? url : c.toDataURL('image/png');
+}
+
+// Flood fill from the photo's edges, removing pixels close to the background color.
+// A stand-in for the AI model: good enough on a wall, bed sheet or floor.
+function removeBg(src, tol) {
+  const w = src.width, h = src.height, N = w * h;
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  const octx = out.getContext('2d');
+  const data = src.getContext('2d').getImageData(0, 0, w, h); const p = data.data;
+  const rs = [], gs = [], bs = [];
+  const sample = i => { rs.push(p[i * 4]); gs.push(p[i * 4 + 1]); bs.push(p[i * 4 + 2]); };
+  for (let x = 0; x < w; x += 2) { sample(x); sample((h - 1) * w + x); }
+  for (let y = 0; y < h; y += 2) { sample(y * w); sample(y * w + w - 1); }
+  const med = a => a.sort((m, n) => m - n)[a.length >> 1];
+  const br = med(rs), bgc = med(gs), bb = med(bs);
+  const t2 = tol * tol, loose = (tol * 1.8) ** 2, step = (tol * .45) ** 2;
+  const dBg = i => { const o = i * 4; if (p[o + 3] < 12) return 0; const r = p[o] - br, g = p[o + 1] - bgc, b = p[o + 2] - bb; return r * r + g * g + b * b; };
+  const dN = (i, j) => { const a = i * 4, b = j * 4, r = p[a] - p[b], g = p[a + 1] - p[b + 1], bl = p[a + 2] - p[b + 2]; return r * r + g * g + bl * bl; };
+  const mask = new Uint8Array(N), q = new Int32Array(N); let qh = 0, qt = 0;
+  const seedPx = i => { if (!mask[i] && dBg(i) < t2) { mask[i] = 1; q[qt++] = i; } };
+  for (let x = 0; x < w; x++) { seedPx(x); seedPx((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { seedPx(y * w); seedPx(y * w + w - 1); }
+  const visit = (i, j) => { if (mask[j]) return; const db = dBg(j); if (db < t2 || (db < loose && dN(i, j) < step)) { mask[j] = 1; q[qt++] = j; } };
+  while (qh < qt) {
+    const i = q[qh++], x = i % w;
+    if (x > 0) visit(i, i - 1);
+    if (x < w - 1) visit(i, i + 1);
+    if (i >= w) visit(i, i - w);
+    if (i < N - w) visit(i, i + w);
+  }
+  let removed = 0, minX = w, minY = h, maxX = -1, maxY = -1;
+  for (let i = 0; i < N; i++) if (mask[i]) { p[i * 4 + 3] = 0; removed++; }
+  for (let i = 0; i < N; i++) {
+    if (mask[i]) continue;
+    const x = i % w, y = (i / w) | 0;
+    if ((x > 0 && mask[i - 1]) || (x < w - 1 && mask[i + 1]) || (i >= w && mask[i - w]) || (i < N - w && mask[i + w])) p[i * 4 + 3] = Math.min(p[i * 4 + 3], 170);
+    if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  octx.putImageData(data, 0, 0);
+  const ratio = removed / N;
+  if (maxX < 0) return { canvas: out, ratio };
+  const pad = Math.round(Math.max(maxX - minX, maxY - minY) * .04);
+  const tw = maxX - minX + 1 + pad * 2, th = maxY - minY + 1 + pad * 2;
+  const trimmed = document.createElement('canvas'); trimmed.width = tw; trimmed.height = th;
+  trimmed.getContext('2d').drawImage(out, minX, minY, maxX - minX + 1, maxY - minY + 1, pad, pad, maxX - minX + 1, maxY - minY + 1);
+  return { canvas: trimmed, ratio };
+}
+
+const colorChipInner = () => { const c = colorById(up.color); return `<span class="dot" style="background:${c.hex}"></span>${c.name} <em>${up.colorManual ? 'chosen by you' : 'detected'} · Change</em>`; };
+function previewSheet(processing, still) {
+  const cat = up.cat;
+  let body;
+  if (processing) body = `<div class="preview checker"><div class="proc"><div class="spinner"></div>Removing background…</div></div>`;
+  else {
+    const showRes = up.mode === 'removed';
+    const warn = showRes && up.ratio < .03 ? `<p class="warn">Couldn't find a plain background. Try a higher strength, or a photo against a wall or sheet.</p>`
+      : showRes && up.ratio > .96 ? `<p class="warn">Most of the photo was removed. Lower the strength.</p>` : '';
+    body = `<button class="switch-row" role="switch" aria-checked="${showRes}" data-act="up-toggle-bg" style="border-top:1px solid var(--line);margin-bottom:12px">
+        <span><b style="font-weight:500">Remove background</b><small class="muted" style="display:block;font-size:12.5px">${up.hasAlpha ? 'Your photo already has a see-through background.' : 'Turn off to keep the photo exactly as it is.'}</small></span><span class="switch"></span></button>
+      <div class="preview${showRes || up.hasAlpha ? ' checker' : ''}"><img id="up-img" src="${showRes ? up.resultUrl : up.origUrl}" alt="Preview of your photo"></div>${warn}
+      <div class="field"><label>Subcategory <output>Required</output></label>${subPicker(cat, up.sub, 'up-sub', up.addingSub, up.subErr)}</div>
+      <div><button class="color-chip" id="up-color-chip" data-act="up-color-toggle" aria-expanded="${!!up.showColors}">${colorChipInner()}</button></div>
+      ${up.showColors ? `<div class="color-grid" style="margin-top:12px">${COLORS.map(c => colorOpt(c, c.id === up.color, 'up-color')).join('')}</div>` : ''}
+      <div class="field"${showRes ? '' : ' hidden'}><label for="up-tol">Removal strength <output id="up-tol-out">${up.tol}</output></label><input type="range" id="up-tol" min="10" max="120" value="${up.tol}"></div>
+      <p class="hint">Prototype: works on plain backgrounds. The real app uses an AI model that handles any background.</p>`;
+  }
+  openSheet(`<span class="eyebrow">${LABEL[cat]}</span><h2 tabindex="-1">Check the photo</h2><p class="sub">The checkered area is see-through. In the app it sits on white.</p>
+    ${body}
+    <div class="sheet-actions"><button class="btn btn-ghost" data-act="up-again">Choose another</button><button class="btn btn-primary" data-act="up-save"${processing || !up.sub ? ' disabled' : ''}>${!processing && !up.sub ? 'Pick a subcategory' : 'Save to ' + LABEL[cat]}</button></div>`, still);
+}
+
+function hasTransparency(canvas) {
+  const p = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  let clear = 0, n = 0;
+  for (let i = 3; i < p.length; i += 16) { n++; if (p[i] < 250) clear++; }
+  return clear / n > .01;
+}
+function runRemoval() {
+  const r = removeBg(up.src, up.tol);
+  up.result = r.canvas; up.ratio = r.ratio; up.resultUrl = r.canvas.toDataURL('image/png');
+  if (!up.colorManual) up.color = detectColor(up.mode === 'original' ? up.src : up.result);
+}
+
+$('#file-item').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file || !up) return;
+  up.mode = 'removed'; up.tol = 45; up.colorManual = false; up.showColors = false; up.sub = null; up.addingSub = false; up.subErr = '';
+  previewSheet(true);
+  try {
+    const img = await loadImage(file);
+    up.src = toCanvas(img, 640);
+    // A photo that is already a cutout (see-through background) skips removal by default
+    up.hasAlpha = hasTransparency(up.src);
+    up.origUrl = up.src.toDataURL(up.hasAlpha ? 'image/png' : 'image/jpeg', .85);
+    if (up.hasAlpha) { up.mode = 'original'; up.color = detectColor(up.src); }
+    else {
+      await new Promise(r => setTimeout(r, 450)); // let the spinner paint
+      runRemoval();
+    }
+    previewSheet(false);
+  } catch (err) {
+    openSheet(`<h2 tabindex="-1">Couldn't open that photo</h2><p class="sub">This format isn't supported here (iPhone HEIC photos often aren't). Try a JPG or PNG.</p><div class="sheet-actions"><button class="btn btn-primary" data-act="up-cat" data-cat="${up.cat}">Choose another photo</button></div>`);
+  }
+});
+
+let tolTimer;
+document.addEventListener('input', e => {
+  if (e.target.id === 'del-confirm') $('#del-go').disabled = e.target.value.trim() !== 'DELETE';
+  if (e.target.id === 'up-tol' && up) {
+    up.tol = +e.target.value; $('#up-tol-out').textContent = up.tol;
+    clearTimeout(tolTimer);
+    tolTimer = setTimeout(() => {
+      runRemoval();
+      const img = $('#up-img'); if (img) img.src = up.resultUrl;
+      const chip = $('#up-color-chip'); if (chip) chip.innerHTML = colorChipInner();
+      const warnEl = document.querySelector('.sheet .warn');
+      const msg = up.ratio < .03 ? "Couldn't find a plain background. Try a higher strength, or a photo against a wall or sheet." : up.ratio > .96 ? 'Most of the photo was removed. Lower the strength.' : '';
+      if (warnEl) { warnEl.textContent = msg; warnEl.hidden = !msg; }
+      else if (msg) img.parentElement.insertAdjacentHTML('afterend', `<p class="warn">${msg}</p>`);
+    }, 140);
+  }
+  if (e.target.id === 'sl-top' || e.target.id === 'sl-shoes') onSplitSlider(e.target.id);
+});
+
+/* ---------- Profile photos ---------- */
+function coverCrop(img, w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const s = Math.max(w / img.width, h / img.height), sw = w / s, sh = h / s;
+  c.getContext('2d').drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, 0, 0, w, h);
+  return c;
+}
+async function setProfilePhoto(file, kind) {
+  try {
+    const img = await loadImage(file);
+    const url = kind === 'cover' ? coverCrop(img, 1200, 420).toDataURL('image/jpeg', .8) : coverCrop(img, 320, 320).toDataURL('image/jpeg', .85);
+    S.user[kind] = url; save(); render();
+    toast(kind === 'cover' ? 'Cover photo updated' : 'Profile photo updated');
+  } catch (e) { toast("Couldn't open that photo. Try a JPG or PNG."); }
+}
+$('#file-cover').addEventListener('change', e => { if (e.target.files[0]) setProfilePhoto(e.target.files[0], 'cover'); });
+$('#file-avatar').addEventListener('change', e => { if (e.target.files[0]) setProfilePhoto(e.target.files[0], 'avatar'); });
+
+/* ---------- Wishlist ---------- */
+const SITES = { myntra: 'Myntra', amazon: 'Amazon', ajio: 'AJIO', flipkart: 'Flipkart', hm: 'H&M', zara: 'Zara', uniqlo: 'Uniqlo', nykaafashion: 'Nykaa Fashion', tatacliq: 'Tata CLiQ', snitch: 'Snitch', bewakoof: 'Bewakoof', meesho: 'Meesho', westside: 'Westside', levi: "Levi's", nike: 'Nike', adidas: 'Adidas', puma: 'Puma', thesouledstore: 'The Souled Store', amzn: 'Amazon', myntr: 'Myntra' };
+function parseProduct(raw) {
+  let u;
+  try { u = new URL(raw.trim()); } catch (e) { return null; }
+  if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.')) return null;
+  const parts = u.hostname.toLowerCase().replace(/^(www\d*|m)\./, '').split('.');
+  const key = parts.find(x => SITES[x]) || (parts.length > 1 ? parts[parts.length - 2] : parts[0]);
+  const site = SITES[key] || key.charAt(0).toUpperCase() + key.slice(1);
+  const segs = u.pathname.split('/').filter(Boolean).map(s => { try { return decodeURIComponent(s); } catch (e) { return s; } });
+  let best = '';
+  const dp = segs.indexOf('dp');
+  if (dp > 0) best = segs[dp - 1];
+  if (!best) best = segs.filter(s => /[a-z]/i.test(s) && /[-_]/.test(s)).sort((a, b) => b.length - a.length)[0] || '';
+  let name = best.replace(/\.(html?|aspx?|php)$/i, '').replace(/[-_+]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (name.split(' ').length < 2 || /^[\d\s]+$/.test(name)) name = '';
+  name = name ? name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').slice(0, 80) : `${site} item`;
+  return { site, name, url: u.href };
+}
+function addLink(e) {
+  e.preventDefault();
+  const input = $('#wl-url'), err = $('#wl-err');
+  const raw = input.value.trim();
+  const info = raw && parseProduct(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw);
+  if (!info) {
+    err.textContent = "That doesn't look like a link. Paste the full product address, for example https://www.myntra.com/…";
+    err.hidden = false; input.focus(); return;
+  }
+  const p = { id: uid('w'), ...info };
+  pendingLinks.push(p);
+  render();
+  setTimeout(() => {
+    pendingLinks = pendingLinks.filter(x => x !== p);
+    S.wishlist.push({ ...info, id: p.id, img: null, createdAt: Date.now() });
+    save();
+    if (view === 'wishlist') render();
+    toast(`Added to wishlist from ${info.site}`);
+  }, 1100);
+}
+document.addEventListener('submit', e => {
+  const f = e.target;
+  if (f.id === 'wl-form') return addLink(e);
+  if (f.id === 'sub-form') return onSubEdit(e);
+  if (!f.dataset.subForm) return;
+  // Inline "+ New" subcategory from the upload screen or the item details
+  e.preventDefault();
+  const r = addSub(f.dataset.cat, $('#new-sub').value);
+  if (f.dataset.subForm === 'up-sub') {
+    if (r.error) up.subErr = r.error; else { up.sub = r.id; up.addingSub = false; up.subErr = ''; toast('Subcategory added'); }
+    previewSheet(false, true);
+  } else {
+    const it = byId(curItem);
+    if (r.error) itemSubErr = r.error; else { it.sub = r.id; itemSubAdding = false; itemSubErr = ''; save(); render(); toast('Subcategory added'); }
+    itemSheet(curItem, r.error ? 'sub' : null, true);
+  }
+});
+
+/* ---------- Managing subcategories (Settings) ---------- */
+function subEditSheet(id, cat, err, blocked) {
+  const s = id && subById(id); cat = s ? s.cat : cat;
+  const n = s ? S.items.filter(i => i.sub === s.id).length : 0;
+  openSheet(`<span class="eyebrow">${LABEL[cat]}</span><h2 tabindex="-1">${s ? 'Edit subcategory' : 'New subcategory'}</h2>
+    <form id="sub-form" data-id="${s ? s.id : ''}" data-cat="${cat}" novalidate>
+      <div class="field"><label for="sub-name">Name</label><input type="text" id="sub-name" maxlength="24" value="${s ? esc(s.name) : ''}" placeholder="e.g. Kurtas"></div>
+      ${err ? `<p class="wl-err">${esc(err)}</p>` : ''}
+      ${s ? `<p class="hint">${n} ${n === 1 ? 'item uses' : 'items use'} this subcategory.</p>` : ''}
+      ${blocked ? `<div class="confirm"><p>"${esc(s.name)}" still has ${n} ${n === 1 ? 'item' : 'items'}. Move ${n === 1 ? 'it' : 'them'} to another subcategory or delete ${n === 1 ? 'it' : 'them'} first.</p></div>` : ''}
+      <div class="sheet-actions">${s ? `<button type="button" class="btn btn-ghost danger-text" data-act="sub-delete" data-id="${s.id}">${ICON.trash} Delete</button>` : ''}<button class="btn btn-primary" type="submit">Save</button></div>
+    </form>`, !!(err || blocked));
+}
+function onSubEdit(e) {
+  e.preventDefault();
+  const f = e.target, id = f.dataset.id || null;
+  const r = addSub(f.dataset.cat, $('#sub-name').value, id);
+  if (r.error) return subEditSheet(id, f.dataset.cat, r.error);
+  closeSheet(); render(); toast(id ? 'Subcategory renamed' : 'Subcategory added');
+}
+
+/* ---------- Outfit builder ---------- */
+const ROWS = ['top', 'bottom', 'shoes'];
+let B = null;
+function openBuilder(editId) {
+  closeSheet();
+  const o = editId && S.outfits.find(x => x.id === editId);
+  const at = (r, id) => Math.max(0, itemsOf(r).findIndex(i => i.id === id));
+  B = { idx: o ? { top: at('top', o.top), bottom: at('bottom', o.bottom), shoes: at('shoes', o.shoes) } : { top: 0, bottom: 0, shoes: 0 }, locked: {}, sub: {}, editId: o ? o.id : null };
+  const el = $('#builder'); el.hidden = false;
+  document.body.classList.add('lock');
+  renderBuilder();
+}
+// A builder row's items, narrowed to the subcategory picked in that row
+const rowList = r => itemsOf(r).filter(i => !B || !B.sub[r] || i.sub === B.sub[r]);
+function subSelect(r) {
+  const subs = subsOf(r).filter(s => itemsOf(r).some(i => i.sub === s.id));
+  return `<select class="b-sub" data-row="${r}" aria-label="Show ${LABEL[r].toLowerCase()}"><option value="">All ${LABEL[r].toLowerCase()}</option>${subs.map(s => `<option value="${s.id}"${B.sub[r] === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select>`;
+}
+document.addEventListener('change', e => {
+  if (!B || !e.target.matches('.b-sub')) return;
+  const r = e.target.dataset.row;
+  B.sub[r] = e.target.value || null; B.idx[r] = 0;
+  renderBuilder();
+});
+function closeBuilder() { $('#builder').hidden = true; $('#builder').innerHTML = ''; B = null; document.body.classList.remove('lock'); }
+function renderBuilder() {
+  const split = [30, 60, 10]; // fixed for everyone (decided in the spec)
+  const canSave = rowList('top').length && rowList('bottom').length;
+  $('#builder').innerHTML = `<div class="b-head">
+      <button class="icon-btn" data-act="builder-close" aria-label="Back">${ICON.back}</button>
+      <h1>${B.editId ? 'Edit outfit' : 'Create outfit'}</h1>
+      <button class="icon-btn" data-act="shuffle" aria-label="Shuffle">${ICON.shuffle}</button>
+    </div>
+    <div class="b-rows">${ROWS.map((r, ri) => {
+      const list = rowList(r);
+      return `<div class="b-row" data-row="${r}" style="flex:0 0 ${split[ri]}%">
+        <span class="b-tag">${itemsOf(r).length ? subSelect(r) : LABEL[r]}${list.length ? ` <span id="pos-${r}">1/${list.length}</span>` : ''}</span>
+        ${list.length > 1 ? `<button class="b-lock" data-act="lock" data-row="${r}" aria-pressed="${!!B.locked[r]}" aria-label="Keep ${LABEL[r].toLowerCase()} when shuffling">${B.locked[r] ? ICON.lock : ICON.unlock}</button>` : ''}
+        ${list.length ? `<div class="b-scroll" data-row="${r}"><div class="b-spacer"></div>${list.map((it, i) => `<button class="b-slide" data-act="slide" data-row="${r}" data-i="${i}" aria-label="${ONE[r]} ${i + 1}"><img src="${imgSrc(it.img)}" alt=""></button>`).join('')}<div class="b-spacer"></div></div>`
+          : `<div class="b-empty">No ${LABEL[r].toLowerCase()} yet. Add some with the + button.</div>`}
+      </div>`;
+    }).join('')}</div>
+    <div class="b-foot"><button class="btn btn-primary" data-act="save-outfit"${canSave ? '' : ' disabled'}>${ICON.check} ${B.editId ? 'Save changes' : 'Save outfit'}</button></div>`;
+  $('#builder').querySelectorAll('.b-scroll').forEach(sc => {
+    let raf = 0;
+    sc.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => syncRow(sc.dataset.row)); }, { passive: true });
+  });
+  layoutRows();
+}
+function layoutRows() {
+  if (!B) return;
+  $('#builder').querySelectorAll('.b-row').forEach(row => {
+    row.classList.toggle('tiny', row.clientHeight < 90);
+    const sc = row.querySelector('.b-scroll'); if (!sc) return;
+    const sw = Math.max(36, Math.min((sc.clientHeight - 8) * .96, sc.clientWidth * .6));
+    sc.style.setProperty('--sw', sw + 'px');
+    scrollToIdx(row.dataset.row, B.idx[row.dataset.row], false);
+  });
+}
+function slidesOf(r) { return [...$('#builder').querySelectorAll(`.b-scroll[data-row="${r}"] .b-slide`)]; }
+function scrollToIdx(r, i, smooth) {
+  const sc = $(`#builder .b-scroll[data-row="${r}"]`); const s = slidesOf(r)[i];
+  if (!sc || !s) return;
+  sc.scrollTo({ left: s.offsetLeft + s.offsetWidth / 2 - sc.clientWidth / 2, behavior: smooth && !reduced ? 'smooth' : 'auto' });
+  if (!smooth) syncRow(r);
+}
+function syncRow(r) {
+  const sc = $(`#builder .b-scroll[data-row="${r}"]`); if (!sc || !B) return;
+  const center = sc.scrollLeft + sc.clientWidth / 2; const slides = slidesOf(r);
+  let best = 0, bd = Infinity;
+  slides.forEach((s, i) => { const d = Math.abs(s.offsetLeft + s.offsetWidth / 2 - center); if (d < bd) { bd = d; best = i; } });
+  B.idx[r] = best;
+  slides.forEach((s, i) => s.classList.toggle('cur', i === best));
+  const pos = $('#pos-' + r); if (pos) pos.textContent = `${best + 1}/${slides.length}`;
+}
+function shuffle() {
+  let moved = 0;
+  ROWS.forEach(r => {
+    const n = rowList(r).length;
+    if (B.locked[r] || n < 2) return;
+    let i; do { i = Math.floor(Math.random() * n); } while (i === B.idx[r]);
+    B.idx[r] = i; scrollToIdx(r, i, true); moved++;
+  });
+  if (!moved) toast('All rows are locked. Unlock one to shuffle.');
+}
+function current(r) { const l = rowList(r); return l.length ? l[Math.min(B.idx[r], l.length - 1)].id : null; }
+
+let accSel = new Set();
+const accLabel = () => accSel.size ? `Save with ${accSel.size} ${accSel.size === 1 ? 'accessory' : 'accessories'}` : 'Save outfit';
+// `warn` re-renders the open sheet with a message and keeps the current picks
+function accSheet(warn) {
+  const accs = itemsOf('acc');
+  const editing = B.editId && S.outfits.find(x => x.id === B.editId);
+  if (!warn) accSel = new Set(editing ? editing.acc.filter(byId) : []);
+  openSheet(`<h2 tabindex="-1">Add accessories</h2><p class="sub">Pick any that go with this outfit, or skip.</p>
+    ${warn ? `<p class="warn" role="alert" style="margin:-8px 0 14px">${warn}</p>` : ''}
+    ${accs.length ? `<div class="pick-grid">${accs.map(a => `<button class="pick${accSel.has(a.id) ? ' on' : ''}" data-act="acc-toggle" data-id="${a.id}" aria-pressed="${accSel.has(a.id)}"><img src="${imgSrc(a.img)}" alt="Accessory"><span class="tick">${ICON.check}</span></button>`).join('')}</div>`
+      : `<p class="hint">You have no accessories yet.</p>`}
+    <div class="sheet-actions"><button class="btn btn-ghost" data-act="outfit-commit" data-skip="1">Skip</button><button class="btn btn-primary" data-act="outfit-commit" id="acc-save">${accLabel()}</button></div>`);
+}
+function commitOutfit(skip) {
+  const pick = { top: current('top'), bottom: current('bottom'), shoes: current('shoes'), acc: skip ? [] : [...accSel] };
+  const editing = B.editId && S.outfits.find(x => x.id === B.editId);
+  // The same pieces (including accessories) can only be saved once
+  const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+  const dup = S.outfits.find(o => o.id !== B.editId && o.top === pick.top && o.bottom === pick.bottom
+    && (o.shoes || null) === (pick.shoes || null) && sameSet(o.acc.filter(byId), pick.acc));
+  if (dup) {
+    accSheet(pick.acc.length
+      ? 'You already saved this exact outfit. Change the accessories, or go back and change a piece.'
+      : 'You already saved this outfit without accessories. Add an accessory, or go back and change a piece.');
+    return;
+  }
+  let no;
+  if (editing) { Object.assign(editing, pick, { updatedAt: Date.now() }); no = editing.no; }
+  else {
+    S.outfitSeq = (S.outfitSeq || S.outfits.length) + 1; no = S.outfitSeq;
+    S.outfits.push({ id: uid('o'), no, ...pick, liked: false, createdAt: Date.now() });
+  }
+  save(); closeSheet(); closeBuilder(); go('outfits');
+  toast(editing ? 'Outfit updated' : 'Outfit saved');
+}
+
+function splitSheet() {
+  const [t, b, s] = S.settings.split;
+  openSheet(`<span class="eyebrow">Only in the prototype</span><h2 tabindex="-1">Row sizes</h2><p class="sub">How much of the screen each row takes. Try a few and keep the one that feels right.</p>
+    <div class="chips">${SPLITS.map(p => `<button class="chip${p.join() === S.settings.split.join() ? ' on' : ''}" data-act="split" data-v="${p.join()}">${p.join(' / ')}</button>`).join('')}</div>
+    <div class="field"><label for="sl-top">Tops <output id="o-top">${t}%</output></label><input type="range" id="sl-top" min="15" max="55" value="${t}"></div>
+    <div class="field"><label for="sl-shoes">Shoes <output id="o-shoes">${s}%</output></label><input type="range" id="sl-shoes" min="6" max="30" value="${s}"></div>
+    <p class="hint" id="o-bottom">Bottoms get the rest: ${b}%</p>
+    <div class="sheet-actions"><button class="btn btn-primary btn-block" data-act="close-sheet">Done</button></div>`);
+}
+function setSplit(sp, fromSlider) {
+  S.settings.split = sp; save();
+  $('#builder').querySelectorAll('.b-row').forEach((row, i) => { row.style.flex = `0 0 ${sp[i]}%`; });
+  setTimeout(layoutRows, reduced ? 0 : 220);
+  if (fromSlider) {
+    $('#o-top').textContent = sp[0] + '%'; $('#o-shoes').textContent = sp[2] + '%'; $('#o-bottom').textContent = `Bottoms get the rest: ${sp[1]}%`;
+    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.v === sp.join()));
+  } else splitSheet();
+}
+function onSplitSlider(id) {
+  let t = +$('#sl-top').value, s = +$('#sl-shoes').value;
+  if (100 - t - s < 20) { if (id === 'sl-top') t = 80 - s; else s = 80 - t; $('#sl-top').value = t; $('#sl-shoes').value = s; }
+  setSplit([t, 100 - t - s, s], true);
+}
+let resizeT;
+addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(layoutRows, 120); });
+
+/* ---------- Click handling ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]'); if (!t) return;
+  const id = t.dataset.id, act = t.dataset.act;
+  switch (act) {
+    case 'nav': if (!$('#sheet-root').hidden) closeSheet(); go(t.dataset.view); break;
+    case 'up-sub': up.sub = id; up.addingSub = false; up.subErr = ''; previewSheet(false, true); break;
+    case 'up-sub-new': up.addingSub = true; up.subErr = ''; previewSheet(false, true); setTimeout(() => $('#new-sub') && $('#new-sub').focus(), 0); break;
+    case 'item-sub-open': itemSubAdding = false; itemSubErr = ''; itemSheet(id, 'sub', true); break;
+    case 'item-sub': { const it = byId(curItem); it.sub = id; save(); render(); itemSheet(curItem, null, true); toast(`Moved to ${subName(id)}`); break; }
+    case 'item-sub-new': itemSubAdding = true; itemSubErr = ''; itemSheet(curItem, 'sub', true); setTimeout(() => $('#new-sub') && $('#new-sub').focus(), 0); break;
+    case 'f-sub': { const i = filters.subs.indexOf(id); if (i < 0) filters.subs.push(id); else filters.subs.splice(i, 1); render(); filterSheet(true); break; }
+    case 'sub-add': subEditSheet(null, id); break;
+    case 'sub-edit': subEditSheet(id); break;
+    case 'sub-delete': {
+      if (S.items.some(i => i.sub === id)) { subEditSheet(id, null, '', true); break; }
+      const nm = subName(id); S.subcats = S.subcats.filter(s => s.id !== id); save(); closeSheet(); render(); toast(`${nm} deleted`);
+      break;
+    }
+    case 'del-account':
+      openSheet(`<h2 tabindex="-1">Delete account?</h2><p class="sub">This deletes all your clothes, outfits, looks, wishlist, settings and photos. It can't be undone.</p>
+        <div class="field"><label for="del-confirm">Type DELETE to confirm</label><input type="text" id="del-confirm" autocomplete="off" autocapitalize="characters"></div>
+        <div class="sheet-actions"><button class="btn btn-ghost" data-act="close-sheet">Cancel</button><button class="btn btn-danger" id="del-go" data-act="del-account-go" disabled>Delete account</button></div>`);
+      setTimeout(() => $('#del-confirm') && $('#del-confirm').focus(), 0);
+      break;
+    case 'del-account-go': {
+      const fresh = seed();
+      S = { ...fresh, items: [], outfits: [], looks: [], wishlist: [], outfitSeq: 0, user: { name: 'New user', handle: 'newuser', avatar: null, cover: null } };
+      save(); applyAccent(); closeSheet(); tab = 'all'; filters = NO_FILTERS(); go('home');
+      toast('Account deleted. Prototype: you now see an empty closet.');
+      break;
+    }
+    case 'plus': plusSheet(); break;
+    case 'tab': tab = t.dataset.tab; filters.subs = []; render(); break;
+    case 'like': {
+      e.stopPropagation();
+      const it = byId(id); it.liked = !it.liked; save();
+      if (view === 'liked') render();
+      else {
+        t.classList.toggle('on', it.liked); t.setAttribute('aria-pressed', it.liked);
+        t.setAttribute('aria-label', it.liked ? 'Remove from liked' : 'Add to liked');
+        t.classList.remove('pop'); if (it.liked) { void t.offsetWidth; t.classList.add('pop'); }
+        if (view === 'home') renderProfile();
+      }
+      break;
+    }
+    case 'like-sheet': { const it = byId(id); it.liked = !it.liked; save(); render(); itemSheet(id, null, true); break; }
+    case 'item': itemSheet(id); break;
+    case 'item-ask-delete': itemSheet(id, 'confirm', true); break;
+    case 'item-color-open': itemSheet(id, 'color', true); break;
+    case 'item-color': { const it = byId(t.dataset.item); it.color = id; save(); render(); itemSheet(it.id, null, true); break; }
+    case 'filters': filterSheet(); break;
+    case 'f-color': { const i = filters.colors.indexOf(id); if (i < 0) filters.colors.push(id); else filters.colors.splice(i, 1); render(); filterSheet(true); break; }
+    case 'f-liked': filters.liked = !filters.liked; render(); filterSheet(true); break;
+    case 'f-unused': filters.unused = !filters.unused; render(); filterSheet(true); break;
+    case 'f-sort': filters.sort = id; render(); filterSheet(true); break;
+    case 'clear-filters': filters = NO_FILTERS(); render(); if (!$('#sheet-root').hidden) filterSheet(true); break;
+    case 'like-outfit': { const o = S.outfits.find(x => x.id === id); o.liked = !o.liked; save(); render(); break; }
+    case 'like-outfit-sheet': { const o = S.outfits.find(x => x.id === id); o.liked = !o.liked; save(); render(); outfitSheet(id, false, true); break; }
+    case 'edit-outfit': openBuilder(id); break;
+    case 'liked-seg': likedSeg = id; render(); break;
+    case 'item-delete': {
+      const idx = S.items.findIndex(i => i.id === id); const [it] = S.items.splice(idx, 1);
+      save(); closeSheet(); render();
+      toast(`${ONE[it.cat]} deleted`, () => { S.items.splice(idx, 0, it); save(); render(); });
+      break;
+    }
+    case 'outfit': outfitSheet(id); break;
+    case 'outfit-ask-delete': outfitSheet(id, true); break;
+    case 'outfit-delete': {
+      const idx = S.outfits.findIndex(o => o.id === id); const [o] = S.outfits.splice(idx, 1);
+      save(); closeSheet(); render();
+      toast('Outfit deleted', () => { S.outfits.splice(idx, 0, o); save(); render(); });
+      break;
+    }
+    case 'close-sheet': closeSheet(); break;
+    case 'upload': if (t.dataset.cat) { closeSheet(); uploadSheet(t.dataset.cat); } else uploadSheet(); break;
+    case 'up-cat': { const c = t.dataset.cat; uploadSheet(c); break; }
+    case 'up-mode':
+      up.mode = t.dataset.mode;
+      if (!up.colorManual) up.color = detectColor(up.mode === 'original' ? up.src : up.result);
+      previewSheet(false, true); break;
+    case 'up-toggle-bg':
+      up.mode = up.mode === 'removed' ? 'original' : 'removed';
+      if (up.mode === 'removed' && !up.result) runRemoval();
+      else if (!up.colorManual) up.color = detectColor(up.mode === 'original' ? up.src : up.result);
+      previewSheet(false, true); break;
+    case 'up-color-toggle': up.showColors = !up.showColors; previewSheet(false, true); break;
+    case 'up-color': up.color = id; up.colorManual = true; up.showColors = false; previewSheet(false, true); break;
+    case 'up-again': uploadSheet(up.cat); break;
+    case 'up-save': {
+      const url = up.mode === 'removed' ? exportImg(up.result, 520) : exportImg(up.src, 520);
+      const cat = up.cat;
+      if (!up.sub) break;
+      S.items.push({ id: uid('i'), cat, sub: up.sub, color: up.color, img: url, liked: false, createdAt: Date.now() });
+      save(); closeSheet(); tab = cat; go('home');
+      toast(`Added to ${LABEL[cat]}`);
+      break;
+    }
+    case 'go-wish': closeSheet(); go('wishlist'); setTimeout(() => $('#wl-url') && $('#wl-url').focus(), 50); break;
+    case 'wl-remove': {
+      e.preventDefault();
+      const w = S.wishlist.find(x => x.id === id);
+      openSheet(`<h2 tabindex="-1">Remove from wishlist?</h2><p class="sub">“${esc(w.name)}” from ${esc(w.site)} will be removed from your wishlist.</p>
+        <div class="sheet-actions"><button class="btn btn-ghost" data-act="close-sheet">Cancel</button><button class="btn btn-danger" data-act="wl-remove-yes" data-id="${id}">Remove</button></div>`);
+      break;
+    }
+    case 'wl-remove-yes': S.wishlist = S.wishlist.filter(w => w.id !== id); save(); closeSheet(); render(); toast('Removed from wishlist'); break;
+    case 'builder': openBuilder(); break;
+    case 'builder-close': closeBuilder(); break;
+    case 'shuffle': shuffle(); break;
+    case 'lock': B.locked[t.dataset.row] = !B.locked[t.dataset.row]; t.setAttribute('aria-pressed', B.locked[t.dataset.row]); t.innerHTML = B.locked[t.dataset.row] ? ICON.lock : ICON.unlock; break;
+    case 'slide': scrollToIdx(t.dataset.row, +t.dataset.i, true); break;
+    case 'save-outfit': accSheet(); break;
+    case 'acc-toggle': {
+      accSel.has(id) ? accSel.delete(id) : accSel.add(id);
+      t.classList.toggle('on', accSel.has(id)); t.setAttribute('aria-pressed', accSel.has(id));
+      $('#acc-save').textContent = accLabel();
+      break;
+    }
+    case 'outfit-commit': commitOutfit(!!t.dataset.skip); break;
+    case 'split-sheet': splitSheet(); break;
+    case 'split': setSplit(t.dataset.v.split(',').map(Number)); break;
+    case 'edit-profile': profileSheet(); break;
+    case 'pick-cover': $('#file-cover').value = ''; $('#file-cover').click(); break;
+    case 'pick-avatar': $('#file-avatar').value = ''; $('#file-avatar').click(); break;
+    case 'save-profile': {
+      const name = $('#pf-name').value.trim(), handle = $('#pf-handle').value.trim().replace(/^@/, '').replace(/\s+/g, '').toLowerCase();
+      if (!name || !handle) { toast('Name and username can’t be empty.'); break; }
+      S.user.name = name; S.user.handle = handle; save(); closeSheet(); render(); toast('Profile saved');
+      break;
+    }
+    case 'proto': protoSheet(); break;
+    case 'accent': S.settings.accent = id; save(); applyAccent(); render(); break;
+    case 'demo-w': S.settings.demoWeather = +id; save(); render(); protoSheet(); break;
+    case 'w-loc': S.settings.weather.useLocation = !S.settings.weather.useLocation; save(); render(); break;
+    case 'w-unit': S.settings.weather.unit = id; save(); render(); break;
+    case 'stat-tab': statTab = id; render(); break;
+    case 'see-unused': filters = NO_FILTERS(); filters.unused = true; tab = 'all'; go('home'); break;
+    case 'add-look': closeSheet(); $('#file-look').value = ''; $('#file-look').click(); break;
+    case 'look': lookSheet(id); break;
+    case 'look-ask-delete': lookSheet(id, true); break;
+    case 'look-delete': S.looks = S.looks.filter(l => l.id !== id); save(); closeSheet(); render(); toast('Look deleted'); break;
+    case 'look-tags': { const l = S.looks.find(x => x.id === id); lookDraft = { id, tags: new Set(l.tags.filter(byId)), cat: 'all' }; lookTagSheet(); break; }
+    case 'lt-cat': lookDraft.cat = id; lookTagSheet(true); break;
+    case 'lt-toggle': {
+      const on = !lookDraft.tags.has(id);
+      on ? lookDraft.tags.add(id) : lookDraft.tags.delete(id);
+      t.classList.toggle('on', on); t.setAttribute('aria-pressed', on);
+      $('#look-save').textContent = lookSaveLabel();
+      break;
+    }
+    case 'look-save': {
+      const d = lookDraft;
+      if (d.id) { S.looks.find(l => l.id === d.id).tags = [...d.tags]; }
+      else S.looks.push({ id: uid('l'), img: d.img, tags: [...d.tags], createdAt: Date.now() });
+      save(); closeSheet(); lookDraft = null; go('looks');
+      toast(d.id ? 'Tags saved' : 'Look added');
+      break;
+    }
+    case 'ask-reset': protoSheet(true); break;
+    case 'reset': S = seed(); save(); applyAccent(); closeSheet(); tab = 'all'; go('home'); toast('Sample closet restored'); break;
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { if (!$('#sheet-root').hidden) closeSheet(); else if (B) closeBuilder(); }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.card[role="button"], .outfit[role="button"], .look[role="button"]')) { e.preventDefault(); e.target.click(); }
+  if (B && $('#sheet-root').hidden && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target.closest && e.target.closest('.b-row')) {
+    const r = e.target.closest('.b-row').dataset.row, n = rowList(r).length;
+    if (n) { e.preventDefault(); const i = Math.max(0, Math.min(n - 1, B.idx[r] + (e.key === 'ArrowRight' ? 1 : -1))); scrollToIdx(r, i, true); }
+  }
+});
+
+// Photos uploaded before color detection existed get a color now
+function fillMissingColors() {
+  S.items.filter(i => !i.color && i.img && !i.img.startsWith('svg:')).forEach(i => {
+    const img = new Image();
+    img.onload = () => { i.color = detectColor(toCanvas(img, 200)); save(); };
+    img.src = i.img;
+  });
+}
+
+applyAccent();
+render();
+fillMissingColors();
+})();
+</script>
