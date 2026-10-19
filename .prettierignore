@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dev-dist/
+package-lock.json
+
+# Owner-written docs and the approved design reference
+spec/
+prototype/
+CLAUDE.md

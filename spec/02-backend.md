@@ -8,7 +8,7 @@ How the server is built and every endpoint it exposes. Read `01-database.md` fir
 
 | Concern | Choice |
 |---|---|
-| Runtime | Node.js 22 LTS |
+| Runtime | Node.js 24 LTS |
 | Language | TypeScript (strict mode) |
 | HTTP framework | Express 5. Async errors reach the error handler without wrappers |
 | ORM / migrations | Prisma (+ hand-written SQL migrations, section 4) |

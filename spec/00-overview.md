@@ -69,7 +69,7 @@ The prototype's background removal, weather, wishlist fetching and storage are f
 | Layer | Choice |
 |---|---|
 | Frontend | React 19 + TypeScript, Vite, React Router, TanStack Query, Zustand, Axios, Zod, react-hook-form, shadcn/ui + Tailwind, PWA |
-| Backend | Node 22 + TypeScript, Express 5, Zod, Prisma, JWT + rotating refresh tokens |
+| Backend | Node 24 LTS + TypeScript, Express 5, Zod, Prisma, JWT + rotating refresh tokens |
 | Database | PostgreSQL on Neon (free) |
 | Images | Cloudinary (free); browser uploads directly with a server-signed request |
 | Background removal | In the browser (`@imgly/background-removal`, confirmed by the phase 1 test) |
@@ -194,3 +194,16 @@ Don't start a phase until the previous one is done.
 | 5 category tab photos (all, top, bottom, shoes, accessory) | Owner | Phase 6 |
 | 10 clothes photos for the model test | Owner | Phase 1 |
 | Hosting choice | Owner + Claude | Phase 10 |
+
+---
+
+## 8. Decisions log
+
+| Topic | Decision |
+|---|---|
+| Node version | Node 24 LTS (was 22) for both apps; `engines` set in each `package.json` |
+| Dev command | Root `package.json` runs client and server together with `concurrently` (`npm run dev`); each app keeps its own `node_modules` (no workspaces) |
+| Server dev tooling | ESM (`"type": "module"`), `tsx watch` in dev, `tsc` build to `dist/` |
+| Phase 0 server files | The envelope helper, `AppError`, `not-found`, `error-handler` and `config/env.ts` are built to their final spec in phase 0 (needed for the 404 check); phase 3 adds the rest |
+| Dependencies | Installed per phase, only when first used |
+| Formatting / linting | Prettier with one shared config at the root for both apps (`npm run format`); the client keeps the linter Vite's template ships (oxlint, `npm run lint`) |

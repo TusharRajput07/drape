@@ -36,7 +36,7 @@ Its background removal, weather, wishlist fetching and storage are fake.
 
 - `client/`: React 19 + TypeScript, Vite, React Router, TanStack Query, Zustand, Axios, Zod, react-hook-form,
   shadcn/ui + Tailwind, lucide-react, sonner, vite-plugin-pwa
-- `server/`: Node 22 + TypeScript, Express 5, Zod, Prisma (+ hand-written SQL migrations), JWT + rotating refresh tokens
+- `server/`: Node 24 LTS + TypeScript, Express 5, Zod, Prisma (+ hand-written SQL migrations), JWT + rotating refresh tokens
 - Database: PostgreSQL on Neon. Images: Cloudinary (direct browser upload with a server signature)
 - Weather: Open-Meteo. Background removal: in the browser (`@imgly/background-removal`, pending the phase 1 test)
 
