@@ -89,6 +89,7 @@ Don't start a phase until the previous one is done.
 - Create the Neon project and the Cloudinary account; fill local `.env` files.
 
 **Done when:** `npm run dev` starts both apps; the server answers `GET /api/v1/unknown` with the standard 404 error envelope.
+(Since phase 3 an unknown `/api/v1` path needs a valid token to get the 404; without one it's 401, see 02 §6.)
 
 ### Phase 1 — Background-removal model test (throwaway)
 - Build the side-by-side test page from 03 §9.1 and run it on 10 of the owner's real clothes photos.
@@ -214,3 +215,7 @@ Don't start a phase until the previous one is done.
 | Database checks | Phase 2's SQL checks live in `server/prisma/checks/` and run by hand with `npm run db:check` (psql); every check rolls back or fails its own COMMIT, so no data is left. Not an automated test |
 | Neon SSL | Connection URLs use `sslmode=verify-full` |
 | Database decisions from phase 2 | PostgreSQL 18, `timestamptz(3)`, deferred block foreign keys, seed via `seed.ts`: see 01 §9 |
+| Liked count | `Me.counts.liked` = liked items + favourite outfits (the two tabs of the Liked page) |
+| Refresh reuse | 10-second grace window for parallel refreshes; after that, reuse revokes the whole session (02 §6) |
+| Login guard | `authenticate` mounted once after the `/auth` routes; unknown `/api/v1` paths answer 401 without a token |
+| Auth rate limit | 10 **failed** signup/login attempts per 15 minutes per IP, counted separately per route |

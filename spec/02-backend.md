@@ -126,7 +126,7 @@ Layer rules:
 | Validation | Every body/query/param goes through a Zod schema in `validators/`; unknown fields are stripped |
 | Body size | `express.json({ limit: '100kb' })`. Images never go through the server |
 | CORS | `origin: CLIENT_URL`, `credentials: true` |
-| Status codes | 200 OK, 201 Created, 204 never (always return the JSON envelope), 400, 401, 404, 409, 422, 429, 500 |
+| Status codes | 200 OK, 201 Created, 204 never (always return the JSON envelope), 400, 401, 404, 409, 422, 429, 500. Malformed JSON and bodies over the limit answer 400 `VALIDATION_ERROR` (not 413) |
 
 ---
 
@@ -221,10 +221,19 @@ Every response, success or error, uses this envelope.
 | Refresh token (random 256-bit, stored hashed in `refresh_tokens`) | 30 days, sliding | httpOnly, Secure cookie `rt`, `path=/api/v1/auth`. `SameSite=Lax` if client and server share a site; `None` if they are on different domains (decide with hosting) |
 
 - **Refresh** rotates: the old token gets `revoked_at` + `replaced_by_id`, a new one is issued, and its expiry resets to 30 days.
-- **Reuse** of an already-rotated token → revoke the whole `family_id` → `SESSION_EXPIRED`.
-- **Logout** revokes the current token and clears the cookie.
+- **Reuse** of an already-rotated token → revoke the whole `family_id` → `SESSION_EXPIRED` (and the cookie is cleared).
+  **Grace window: 10 s.** A token rotated less than 10 s ago that comes back (two tabs refreshing at once, React's dev mode
+  running start-up twice) gets another fresh token in the same family instead, as long as the family is still alive.
+- **Logout** revokes the current device's session (the token's `family_id`) and clears the cookie. Always answers `{ loggedOut: true }`, even without a cookie.
 - `authenticate` middleware: verifies the JWT, sets `req.user = { id }`. No database call per request.
-- `express-rate-limit` on `/auth/signup` and `/auth/login`: 10 requests per 15 minutes per IP.
+  It is mounted **once** in `routes/index.ts`, right after the `/auth` router, so every later router is protected
+  automatically. Unknown `/api/v1` paths therefore answer 401 without a token and 404 with one.
+- `express-rate-limit` on `/auth/signup` and `/auth/login`: 10 **failed** requests per 15 minutes per IP (successful ones
+  don't count, `skipSuccessfulRequests`), with a separate counter for each route.
+- Login: a wrong email still runs one bcrypt comparison (against a dummy hash), so the response time doesn't reveal
+  whether an email has an account.
+- Input rules: email and username are trimmed and lowercased before validation; password 8–72 characters **and**
+  at most 72 bytes (bcrypt ignores anything after 72 bytes).
 
 ### 6.1 Public routes (the only exceptions to "every route is protected")
 
@@ -281,7 +290,7 @@ Look         = { id: string; image: Image; items: Item[] }
 WishlistItem = { id: string; url: string; siteName: string; productName: string; image: Image | null }
 Me           = { id; email; name; username; avatar: Image | null; cover: Image | null;
                  settings: { accent; tempUnit: 'C' | 'F'; useLocation: boolean; cityName: string | null };
-                 counts: { items; outfits; looks; liked; wishlist } }
+                 counts: { items; outfits; looks; liked; wishlist } }   // liked = liked items + favourite outfits
 ```
 
 ### 8.2 Auth
@@ -309,7 +318,8 @@ Login updates `last_login_at`. Wrong email and wrong password both return `INVAL
 | PATCH | `/me/settings` | `{ accent?, tempUnit?, useLocation?, cityName? (null clears) }` | `Me` |
 | DELETE | `/me` | `{ confirm: "DELETE" }` | `{ deleted: true }` + clears cookie |
 
-- Setting `cityName` geocodes it with Open-Meteo (first match) and stores lat/lon. Not found → `VALIDATION_ERROR` on `cityName`.
+- Setting `cityName` geocodes it with Open-Meteo (first match) and stores lat/lon, and the **geocoder's spelling** of the name
+  ("pune" → "Pune"). Not found → `VALIDATION_ERROR` on `cityName`. Geocoder unreachable → 500 "Couldn't look up that city right now".
 - Replacing an avatar/cover deletes the old image (01 §7).
 
 ### 8.4 Lookups 🔒
@@ -468,11 +478,15 @@ Abandoned uploads (signed and uploaded, but never saved) are cleaned up by a wee
 - `utils/prisma-errors.ts` converts database errors using the table in 01 §8:
   - Prisma `P2002` (unique) → by constraint name: `EMAIL_TAKEN`, `USERNAME_TAKEN`, `SUBCATEGORY_EXISTS`, `OUTFIT_DUPLICATE`, `WISHLIST_DUPLICATE`.
   - Prisma `P2003` (foreign key) → `ITEM_IN_USE` / `SUBCATEGORY_IN_USE`.
-  - Errors raised at COMMIT by the deferred outfit trigger can arrive as an unknown/raw request error.
-    Inspect the underlying Postgres code: `23505` → `OUTFIT_DUPLICATE`, `23514` → `OUTFIT_INVALID`.
+  - Errors raised at COMMIT (the deferred outfit trigger and the deferred block foreign keys) arrive, inside a
+    `$transaction`, as a raw `DriverAdapterError` (verified in phase 3). Its `cause` holds the Postgres code
+    (`originalCode`) and the constraint (`constraint.index`): `23505` → `OUTFIT_DUPLICATE`, `23514` → `OUTFIT_INVALID`,
+    `23503` → `ITEM_IN_USE` / `SUBCATEGORY_IN_USE`. Prisma-wrapped errors carry the same `cause` in `meta.driverAdapterError`.
+  - Other CHECK violations (Prisma `P2039`, code `23514`) → `VALIDATION_ERROR` on the field taken from the constraint
+    name (`<table>_<column>_check`).
   - Prisma `P2025` (record not found) → `NOT_FOUND`.
 - `error-handler.ts` (last middleware):
-  - `ZodError` → 400 `VALIDATION_ERROR` with `details`
+  - `ZodError` → 400 `VALIDATION_ERROR` with `details` (a missing field reads "Required")
   - `AppError` → its status/code/message
   - anything else → **`console.error(err)`** and 500 `INTERNAL_ERROR` with a generic message
 - `try/catch` blocks that swallow or translate an error (Cloudinary clean-up, page fetch, geocoding) also `console.error` what they caught.
