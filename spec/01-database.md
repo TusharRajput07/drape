@@ -276,9 +276,13 @@ PK `(look_id, item_id)`; `→ looks` CASCADE; `→ items(id, user_id)` NO ACTION
 | `created_at` / `updated_at` | timestamptz | Sorting / record keeping |
 
 - `UNIQUE (user_id, url)` — the same product can't be saved twice ("Already in your wishlist").
-- The backend **normalizes the URL** before saving: lowercase the host, drop `www.`/`m.` differences
-  only if the shop serves both, remove `utm_*`, `ref`, `fbclid`, `gclid` and other tracking parameters,
-  remove the `#fragment`, remove a trailing `/`.
+- The backend **normalizes the URL** before saving (`utils/url-normalize.ts`):
+  - every link: lowercase the host, remove the `#fragment`, remove user/password, remove tracking parameters
+    (`utm_*`, `pd_rd_*`, `pf_rd_*`, `ref`, `ref_`, `fbclid`, `gclid`, `gclsrc`, `dclid`, `gbraid`, `wbraid`, `msclkid`, `yclid`,
+    `igshid`, `igsh`, `srsltid`, `mc_cid`, `mc_eid`, `_ga`, `_gl`, `si`, `spm`, `scm`), sort the remaining parameters, remove a trailing `/`;
+  - shops that serve both `www.`/`m.`/bare hosts get one canonical host: Myntra, AJIO, Flipkart, Zara → `www.<shop>.com`, H&M → `www2.hm.com`;
+  - Amazon (any country domain) with a product id → `https://www.amazon.<tld>/dp/<ASIN>`, nothing else, so every form of the same product matches;
+  - other hosts keep `www.`/`m.` as typed. Short links (`amzn.in/…`) are stored as pasted.
 - If the page can't be fetched, the product name comes from the URL slug, and failing that
   `"<Site> item"`. `image_id` stays null and the card shows name + link.
 - No price (decided).
@@ -684,9 +688,9 @@ Inserted by `prisma/seed.ts` (`npm run db:seed`), which upserts every row (categ
 3. After commit: delete the old Cloudinary file.
 
 **Delete account** (typed confirmation "DELETE")
-1. Read all `images.public_id` for the user.
-2. Delete those files from Cloudinary (batch API).
-3. `DELETE FROM users WHERE id = $1`. Everything else cascades.
+1. Delete everything under the user's Cloudinary folder `wardrobe/<userId>/` (by prefix, so abandoned uploads go too), then the empty folders.
+   If Cloudinary fails, log it and carry on: the account is still deleted.
+2. `DELETE FROM users WHERE id = $1`. Everything else cascades.
 
 ---
 
@@ -729,3 +733,5 @@ Constraint names above are Postgres defaults or names set in the DDL. Verified a
 | Timestamps | `timestamptz(3)` (milliseconds) so pagination cursors built from JavaScript dates are exact |
 | Block foreign keys | `NO ACTION` + `DEFERRABLE INITIALLY DEFERRED` (checked at COMMIT), because plain `NO ACTION` made account deletion fail (section 2) |
 | Seed data | `prisma/seed.ts`, re-runnable upserts (not a migration) |
+| Wishlist link cleaning | Generic rules + known-shop canonical hosts + Amazon `/dp/<ASIN>` (section 3.14) |
+| Account delete files | The whole `wardrobe/<userId>/` folder is deleted (also catches abandoned uploads); a Cloudinary failure doesn't block the delete |

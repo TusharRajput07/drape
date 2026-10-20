@@ -73,6 +73,7 @@ server/
 │   │   ├── auth.service.ts
 │   │   ├── token.service.ts       sign/verify JWT, rotate refresh tokens
 │   │   ├── user.service.ts
+│   │   ├── lookup.service.ts      categories + colours (read-only)
 │   │   ├── subcategory.service.ts
 │   │   ├── item.service.ts
 │   │   ├── outfit.service.ts
@@ -82,6 +83,7 @@ server/
 │   │   ├── weather.service.ts
 │   │   └── image.service.ts       Cloudinary sign / verify / delete + images rows
 │   ├── validators/                Zod schemas, one file per resource
+│   │   ├── common.schema.ts       shared pieces: ids, path ids, pagination, repeatable query values
 │   │   └── *.schema.ts
 │   ├── middlewares/
 │   │   ├── authenticate.ts        requires a valid access token; sets req.user
@@ -121,7 +123,7 @@ Layer rules:
 | Style | REST, JSON bodies, `camelCase` fields in JSON (snake_case only in the database) |
 | IDs | UUID strings |
 | Auth | Every route requires `Authorization: Bearer <accessToken>` **except** the public ones in §6.1 |
-| Ownership | A resource that belongs to someone else returns **404**, never 403, so ids can't be probed |
+| Ownership | A resource that belongs to someone else returns **404**, never 403, so ids can't be probed. A malformed id in the path (`/items/123`) also returns 404. Another user's id inside a body is a `VALIDATION_ERROR` (or `OUTFIT_INVALID` / `UPLOAD_INVALID` where those apply) |
 | Dates | Not returned unless a screen needs them (the UI never shows dates) |
 | Validation | Every body/query/param goes through a Zod schema in `validators/`; unknown fields are stripped |
 | Body size | `express.json({ limit: '100kb' })`. Images never go through the server |
@@ -320,7 +322,10 @@ Login updates `last_login_at`. Wrong email and wrong password both return `INVAL
 
 - Setting `cityName` geocodes it with Open-Meteo (first match) and stores lat/lon, and the **geocoder's spelling** of the name
   ("pune" → "Pune"). Not found → `VALIDATION_ERROR` on `cityName`. Geocoder unreachable → 500 "Couldn't look up that city right now".
-- Replacing an avatar/cover deletes the old image (01 §7).
+- Replacing an avatar/cover deletes the old image (01 §7). `DELETE /me/avatar|cover` deletes the image row and the file.
+- `DELETE /me`: any `confirm` other than exactly `"DELETE"` → 422 `CONFIRMATION_REQUIRED`. Then the server deletes the user's **whole Cloudinary
+  folder** `wardrobe/<userId>/` (which also catches abandoned uploads) and the empty folders, then the `users` row (everything cascades).
+  If Cloudinary fails, the error is logged and the account is deleted anyway.
 
 ### 8.4 Lookups 🔒
 
@@ -341,6 +346,8 @@ Small and fixed. The client caches them for the session.
 | DELETE | `/subcategories/:id` | — | `{ deleted: true }` or 409 `SUBCATEGORY_IN_USE` |
 
 Not paginated (a user has a few dozen at most). Names are trimmed, inner spaces collapsed, 1–24 chars.
+A new subcategory goes to the end of its category. Same name (any case) → `SUBCATEGORY_EXISTS` *"Kurtas" already exists in Tops.*
+Unknown `categoryId` → `VALIDATION_ERROR`. In-use message: *"Shirts" still has 3 items. Move or delete them first.*
 
 ### 8.6 Items 🔒
 
@@ -365,7 +372,10 @@ Not paginated (a user has a few dozen at most). Names are trimmed, inner spaces 
 
 - `POST /items` verifies the upload (§8.12), checks that `subcategoryId` belongs to the user and the category, then inserts `images` + `items` in one transaction.
 - `PATCH` with a `subcategoryId` from another category → `VALIDATION_ERROR` (an item can't change category).
-- `DELETE` counts usage first; if used → 409 with `details: { outfits, looks }`. Otherwise it deletes the item and image rows, then the Cloudinary file.
+- `DELETE` counts usage first; if used → 409 with `details: { outfits, looks }` and the message *"This item is in 2 outfits and 1 look. Remove it from those first."*
+  Otherwise it deletes the item and image rows, then the Cloudinary file.
+- A `subcategoryId` that isn't the user's, or a `colorId` that doesn't exist → `VALIDATION_ERROR` on that field.
+- Query: repeated ids arrive as an array; `liked=false` / `unused=false` mean no filter.
 
 ### 8.7 Outfits 🔒
 
@@ -383,6 +393,7 @@ Not paginated (a user has a few dozen at most). Names are trimmed, inner spaces 
 - Writes happen in one transaction; the deferred trigger checks counts and the signature at commit.
   Unique violation → `OUTFIT_DUPLICATE`. Check violation → `OUTFIT_INVALID`.
 - `PUT` on an outfit with the same pieces as itself is fine (no duplicate error against itself).
+- The same item in two slots → `OUTFIT_INVALID`. Accessories are returned newest first.
 
 ### 8.8 Looks (Lookbooks) 🔒
 
@@ -394,7 +405,8 @@ Not paginated (a user has a few dozen at most). Names are trimmed, inner spaces 
 | PUT | `/looks/:id/items` | `{ itemIds: string[] }` (replaces the tags) | `Look` |
 | DELETE | `/looks/:id` | — | `{ deleted: true }` |
 
-All `itemIds` must belong to the user (else `VALIDATION_ERROR`). Max 20 tags.
+All `itemIds` must belong to the user (else `VALIDATION_ERROR`). Max 20 tags, de-duplicated, returned newest first.
+Deleting a look also deletes its image row and the Cloudinary file.
 
 ### 8.9 Wishlist 🔒
 
@@ -405,15 +417,22 @@ All `itemIds` must belong to the user (else `VALIDATION_ERROR`). Max 20 tags.
 | DELETE | `/wishlist/:id` | — | `{ deleted: true }` |
 
 **`POST /wishlist` steps (`wishlist.service.ts`)**
-1. Validate the URL (http/https, ≤ 2048 chars) and normalize it (`utils/url-normalize.ts`, rules in 01 §3.14).
+1. Validate the URL (http/https, ≤ 2048 chars) and normalize it (`utils/url-normalize.ts`, rules in 01 §3.14: shop hosts, Amazon `/dp/<ASIN>`, tracking list).
 2. Already saved → `WISHLIST_DUPLICATE`, before fetching anything.
 3. Fetch the page server-side: 8 s timeout, ≤ 2 MB, browser-like `User-Agent`, max 3 redirects.
    Read `og:title` / `<title>` and `og:image`.
    **SSRF guard:** only http(s); reject hosts that resolve to private, loopback or link-local IPs.
+   Built on Node's own `http`/`https` + `dns` + `net.BlockList`, no extra package: every connection (each redirect too) goes through a
+   checking DNS lookup, IP literals are checked directly, and the blocked ranges include 0/8, 10/8, 100.64/10, 127/8, 169.254/16,
+   172.16/12, 192.168/16, the documentation and benchmark ranges, multicast/reserved, `::1`, `fc00::/7`, `fe80::/10` and IPv4-mapped IPv6.
+   (`::ffff:0:0/96` must not be put into the `BlockList`: Node then matches every IPv4 address.) Only a 2xx HTML answer is read.
+   Meta tags are read with small regexes (no HTML parser); entities decoded, spaces collapsed.
 4. Site name: `og:site_name`, else a known-shops map (myntra → Myntra, amazon → Amazon, ajio → AJIO, flipkart → Flipkart, hm → H&M, zara → Zara, …), else the capitalised domain.
-5. Product name: page title, else the URL slug (`…/dp/` segment for Amazon, longest hyphenated segment otherwise, title-cased), else `"<Site> item"`. Max 200 chars.
+5. Product name: page title (`og:title`, then `<title>`, used as is; a title that is only the shop's name, like the "Amazon.in" page Amazon shows to bots, is ignored), else the URL slug (`…/dp/` segment for Amazon, longest hyphenated segment otherwise, title-cased), else `"<Site> item"`. Max 200 chars.
 6. Photo: if `og:image` exists, upload it to Cloudinary from the URL (kind `wishlist`). Any failure → no photo, not an error.
 7. Insert `images` (if any) + `wishlist_items` in one transaction.
+
+`DELETE` removes the wishlist row, its image row and the Cloudinary file. An IP-address host is its own site name.
 
 ### 8.10 Stats 🔒
 
@@ -433,7 +452,9 @@ All `itemIds` must belong to the user (else `VALIDATION_ERROR`). Max 20 tags.
   wishlist: { count: number; topSite: string | null }
 }
 ```
-Percentages are rounded integers. Computed with aggregate SQL (`groupBy` / `$queryRaw`), never by loading every item.
+Percentages are rounded integers (0 when there's nothing to count). Computed with aggregate SQL (`groupBy` / `$queryRaw`), never by loading every item.
+`byColor` and `bySubcategory` leave out zero counts and are sorted by count (ties: colour order / subcategory order); `byCategory` always lists all 4.
+`mostStyled` is `null` when no item is in any outfit or look. `topSite` ties → alphabetical.
 
 ### 8.11 Weather 🔒
 
@@ -442,9 +463,11 @@ Percentages are rounded integers. Computed with aggregate SQL (`groupBy` / `$que
 | GET | `/weather` | `?lat=&lon=` (optional) | `{ tempC: number; condition: 'clear' \| 'cloudy' \| 'rain' \| 'snow' \| 'fog' \| 'storm'; message: string; place: string \| null }` |
 
 - With `lat`/`lon` (the browser gave its location) → use them. Otherwise use the saved city. Neither → `VALIDATION_ERROR` with code-specific message "Add your city in Settings".
-- Calls Open-Meteo `current=temperature_2m,weather_code`. Maps `weather_code` to `condition`.
+- `lat` and `lon` must come together (else `VALIDATION_ERROR`). `place` is the saved city's name, or `null` when `lat`/`lon` are sent (Open-Meteo has no reverse geocoding).
+- Calls Open-Meteo `current=temperature_2m,weather_code`. Maps `weather_code` (WMO) to `condition`: 0–1 clear, 2–3 cloudy, 45/48 fog,
+  51–67 and 80–82 rain, 71–77 and 85–86 snow, 95–99 storm.
 - `message` comes from `utils/weather-message.ts`, the same rules as the prototype:
-  - rain → "Rain on the way. Skip suede and light bottoms today."
+  - rain or storm → "Rain on the way. Skip suede and light bottoms today."
   - ≤ 10 °C → "Cold out. Layer up with a hoodie or jacket."
   - ≤ 18 °C → "Cool and easy. Full sleeves or a light layer."
   - ≤ 26 °C → "Perfect weather. Tee and jeans territory."
@@ -457,16 +480,19 @@ Percentages are rounded integers. Computed with aggregate SQL (`groupBy` / `$que
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/uploads/signature` | `{ kind: 'item' \| 'look' \| 'avatar' \| 'cover' }` | `{ cloudName, apiKey, timestamp, signature, folder, publicId, allowedFormats, maxBytes }` |
+| POST | `/uploads/signature` | `{ kind: 'item' \| 'look' \| 'avatar' \| 'cover' }` | `{ cloudName, apiKey, timestamp, signature, folder, publicId, allowedFormats: 'webp,png,jpg', maxBytes }` |
 
 **Flow**
 1. Client asks for a signature for a `kind`.
-2. Server signs upload params: folder `wardrobe/<userId>/<kind>`, `public_id` = new UUID, allowed formats (`webp, png, jpg`), max size 8 MB. Valid for 10 minutes.
+2. Server signs upload params: folder `wardrobe/<userId>/<kind>`, `public_id` = new UUID, allowed formats (`webp, png, jpg`), max size 8 MB.
+   Cloudinary refuses a signature after **1 hour** (its fixed limit; was written as 10 minutes). The browser sends `timestamp`, `folder`,
+   `public_id`, `allowed_formats`, `api_key` and `signature` unchanged. The account uses dynamic folders: `folder` sets both the asset folder
+   and the `public_id` prefix, so the saved id is `wardrobe/<userId>/<kind>/<uuid>`. Cloudinary has no max-size upload param, so 8 MB is checked in step 5.
 3. Browser uploads the file straight to Cloudinary with those params.
 4. Client calls the resource endpoint (`POST /items`, `POST /looks`, `PUT /me/avatar`, `PUT /me/cover`) with the `publicId`.
 5. Server **verifies** with the Cloudinary Admin API that the file exists, is under the user's folder and the right kind's folder, and is within limits. Then it reads `url/width/height/bytes/format` and creates the `images` row.
-   Anything wrong → `UPLOAD_INVALID`.
-6. If the database write fails after verification → delete the Cloudinary file.
+   Anything wrong → `UPLOAD_INVALID`, including a `publicId` already used by another image row.
+6. If the database write fails after verification → delete the Cloudinary file, **unless** the failure is that another row already uses it.
 
 Abandoned uploads (signed and uploaded, but never saved) are cleaned up by a weekly job that deletes files in `wardrobe/*` with no `images` row older than 24 h.
 
@@ -485,6 +511,7 @@ Abandoned uploads (signed and uploaded, but never saved) are cleaned up by a wee
   - Other CHECK violations (Prisma `P2039`, code `23514`) → `VALIDATION_ERROR` on the field taken from the constraint
     name (`<table>_<column>_check`).
   - Prisma `P2025` (record not found) → `NOT_FOUND`.
+  - `images_public_id_key` (the same upload saved twice at once) → `UPLOAD_INVALID`.
 - `error-handler.ts` (last middleware):
   - `ZodError` → 400 `VALIDATION_ERROR` with `details` (a missing field reads "Required")
   - `AppError` → its status/code/message
@@ -536,3 +563,4 @@ No job runner in v1. Two small scripts (`npm run job:tokens`, `npm run job:uploa
 | Hosting | Not decided. Must not sleep for long (owner's requirement). Affects `COOKIE_SAMESITE` and the cron jobs |
 | Email verification / password reset | Out of scope for v1 |
 | Tests | Out of scope for v1 |
+| Cloudinary Admin API limit | Upload verification (§8.12 step 5) uses the Admin API, which allows **500 calls per hour** per Cloudinary account on the free plan, shared by all users. Fine for one person; revisit before more users (e.g. verify the signed upload response instead) |

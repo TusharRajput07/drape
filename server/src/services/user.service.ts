@@ -2,6 +2,13 @@ import { prisma } from '../db/prisma.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { AppError } from '../utils/app-error.js';
 import type { UpdateMeInput, UpdateSettingsInput } from '../validators/me.schema.js';
+import {
+  deleteFiles,
+  deleteUserFolder,
+  imageData,
+  saveWithFile,
+  verifyUpload,
+} from './image.service.js';
 import { geocodeCity } from './weather.service.js';
 
 export type Image = { url: string; width: number | null; height: number | null };
@@ -78,4 +85,59 @@ export async function updateSettings(userId: string, input: UpdateSettingsInput)
 
   await prisma.userSettings.update({ where: { userId }, data });
   return getMe(userId);
+}
+
+export type ProfileSlot = 'avatar' | 'cover';
+
+const slotColumn = { avatar: 'avatarImageId', cover: 'coverImageId' } as const;
+
+// New image row → point the user at it → delete the old row; the old file goes after commit (01 §7).
+export async function setProfileImage(
+  userId: string,
+  slot: ProfileSlot,
+  publicId: string,
+): Promise<Me> {
+  const file = await verifyUpload(userId, slot, publicId);
+  const old = await saveWithFile(file, () =>
+    prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: { avatar: true, cover: true },
+      });
+      const image = await tx.image.create({ data: imageData(userId, slot, file) });
+      await tx.user.update({ where: { id: userId }, data: { [slotColumn[slot]]: image.id } });
+      const previous = user[slot];
+      if (previous) await tx.image.delete({ where: { id: previous.id } });
+      return previous;
+    }),
+  );
+  if (old) await deleteFiles([old.publicId]);
+  return getMe(userId);
+}
+
+// The profile falls back to initials (avatar) or the plain cover.
+export async function removeProfileImage(userId: string, slot: ProfileSlot): Promise<Me> {
+  const old = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: { avatar: true, cover: true },
+    });
+    const previous = user[slot];
+    if (previous) await tx.image.delete({ where: { id: previous.id } }); // SET NULL on users
+    return previous;
+  });
+  if (old) await deleteFiles([old.publicId]);
+  return getMe(userId);
+}
+
+// Typed confirmation, then the user's whole Cloudinary folder, then the user row: everything
+// else cascades (01 §7). A Cloudinary failure doesn't stop the delete.
+export async function deleteAccount(userId: string, confirm: unknown): Promise<void> {
+  if (confirm !== 'DELETE') {
+    throw new AppError('CONFIRMATION_REQUIRED', 'Type DELETE to confirm.', 422, [
+      { field: 'confirm', message: 'Type DELETE to confirm.' },
+    ]);
+  }
+  await deleteUserFolder(userId);
+  await prisma.user.delete({ where: { id: userId } });
 }

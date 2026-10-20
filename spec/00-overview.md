@@ -196,6 +196,7 @@ Don't start a phase until the previous one is done.
 | 5 category tab photos (all, top, bottom, shoes, accessory) | Owner | Phase 6 |
 | HTTPS + cross-origin isolation (COOP/COEP) for background removal, incl. the effect on Cloudinary and wishlist images (03 §12) | Owner + Claude | Phase 6 / hosting |
 | Hosting choice | Owner + Claude | Phase 10 |
+| Cloudinary Admin API limit (500 calls/hour, used by upload verification; 02 §12) | Owner + Claude | Before more users |
 
 ---
 
@@ -219,3 +220,9 @@ Don't start a phase until the previous one is done.
 | Refresh reuse | 10-second grace window for parallel refreshes; after that, reuse revokes the whole session (02 §6) |
 | Login guard | `authenticate` mounted once after the `/auth` routes; unknown `/api/v1` paths answer 401 without a token |
 | Auth rate limit | 10 **failed** signup/login attempts per 15 minutes per IP, counted separately per route |
+| Wishlist link cleaning | Generic rules (tracking list, sorted params, no fragment/trailing `/`) + one canonical host for known shops + Amazon links reduced to `/dp/<ASIN>` (01 §3.14) |
+| Upload signature lifetime | 1 hour, Cloudinary's fixed limit (was written as 10 minutes); the file is still verified on save (02 §8.12) |
+| Account delete files | Delete the whole `wardrobe/<userId>/` Cloudinary folder; if Cloudinary fails, the account is deleted anyway (02 §8.3) |
+| Malformed path ids | `/items/123` answers 404 `NOT_FOUND`, like an id that isn't yours |
+| Shop-only page titles | A page title that is only the shop's name (Amazon's "Amazon.in" bot page) is ignored; the name comes from the link instead (02 §8.9) |
+| Phase 4 small defaults | New subcategory at the end; "This item is in 2 outfits and 1 look…" message; reused upload → `UPLOAD_INVALID` without deleting the file; weather: rain message for rain and storm, `place` null with `lat`/`lon`; stats leave out zero colours/subcategories; accessories/tags newest first; one new package (`cloudinary`); the cleanup jobs (02 §11) are written in phase 10 |

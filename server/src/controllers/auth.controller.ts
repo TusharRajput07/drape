@@ -18,7 +18,7 @@ const cookieOptions: CookieOptions = {
 const setRefreshCookie = (res: Response, { token, expiresAt }: RefreshToken) =>
   res.cookie(COOKIE, token, { ...cookieOptions, expires: expiresAt });
 
-const clearRefreshCookie = (res: Response) => res.clearCookie(COOKIE, cookieOptions);
+export const clearRefreshCookie = (res: Response) => res.clearCookie(COOKIE, cookieOptions);
 
 const userAgent = (req: Request) => req.get('user-agent') ?? null;
 const refreshCookie = (req: Request): string | undefined => req.cookies?.[COOKIE];

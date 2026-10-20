@@ -38,6 +38,12 @@ const UNIQUE: Record<string, Mapping> = {
     status: 409,
     message: 'You already saved this outfit.',
   },
+  // The same uploaded file sent twice at once (image.service checks first; this is the race).
+  images_public_id_key: {
+    code: 'UPLOAD_INVALID',
+    status: 400,
+    message: 'That photo is already saved.',
+  },
   wishlist_user_url_key: {
     code: 'WISHLIST_DUPLICATE',
     status: 409,
