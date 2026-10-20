@@ -210,3 +210,7 @@ Don't start a phase until the previous one is done.
 | Formatting / linting | Prettier with one shared config at the root for both apps (`npm run format`); the client keeps the linter Vite's template ships (oxlint, `npm run lint`) |
 | Background removal | `@imgly/background-removal`, **default model** (`isnet_fp16`); the small model wasn't good enough. Runs on WebGPU (`device: 'gpu'`) with automatic fallback to the multi-threaded CPU. Measured per photo: laptop GPU ~2.4 s, laptop CPU ~8 s, phone GPU 2–4 s, phone CPU ~15 s; first photo slower; model downloads once. Needs HTTPS + cross-origin isolation (open item). Details in 03 §9.1 |
 | Upload photo handling | Tip "For the best cutout, lay it flat on a plain floor or sheet." above the photo button; EXIF orientation applied automatically; a rotate button (90° clockwise per tap) applied before background removal and colour detection (03 §6.4) |
+| Prisma | Prisma 7 (7.10.1, the latest stable; 8 was only a release candidate), `@prisma/adapter-pg`, `prisma.config.ts`, generated client not committed |
+| Database checks | Phase 2's SQL checks live in `server/prisma/checks/` and run by hand with `npm run db:check` (psql); every check rolls back or fails its own COMMIT, so no data is left. Not an automated test |
+| Neon SSL | Connection URLs use `sslmode=verify-full` |
+| Database decisions from phase 2 | PostgreSQL 18, `timestamptz(3)`, deferred block foreign keys, seed via `seed.ts`: see 01 §9 |

@@ -7,3 +7,4 @@ package-lock.json
 spec/
 prototype/
 CLAUDE.md
+server/src/generated/

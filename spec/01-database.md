@@ -3,7 +3,7 @@
 Drape. Multi-user: every user sees only their own data.
 This document is the source of truth for the database. Build migrations from it exactly.
 
-- **Engine:** PostgreSQL 16 (hosted on Neon, free plan)
+- **Engine:** PostgreSQL 18 (hosted on Neon, free plan)
 - **Images:** stored as files in Cloudinary; the database stores only their id and URL
 - **Status:** agreed with the product owner on 2026-10-18
 
@@ -14,11 +14,11 @@ This document is the source of truth for the database. Build migrations from it 
 | Rule | Detail |
 |---|---|
 | Primary keys | `uuid` everywhere, `DEFAULT gen_random_uuid()` |
-| Time | `timestamptz` everywhere; `created_at`/`updated_at` default `now()` |
+| Time | `timestamptz(3)` (millisecond precision) everywhere; `created_at`/`updated_at` default `now()`. Milliseconds because JavaScript dates hold milliseconds: microseconds would be cut off in pagination cursors, and rows could be skipped (02 §7) |
 | `updated_at` | Kept current by the `set_updated_at()` trigger (section 5.1) |
 | Case-insensitive text | `citext` for email, username and subcategory names |
 | Ownership | Every user-owned table has `user_id`. Child rows repeat `user_id` and use **composite foreign keys** so a row can never point at another user's data |
-| Deletes | See section 2. "Block" = `ON DELETE NO ACTION` |
+| Deletes | See section 2. "Block" = `ON DELETE NO ACTION`, `DEFERRABLE INITIALLY DEFERRED` (checked at COMMIT) |
 | Dates in the UI | Never shown to users. `created_at` is kept only for sorting and records |
 | Naming | snake_case, plural table names, `<table>_<cols>_idx` for indexes |
 
@@ -30,20 +30,24 @@ The product rule: **anything still in use cannot be deleted; the user is told wh
 
 | Deleting… | While used by… | Behaviour | How |
 |---|---|---|---|
-| Subcategory | items | **Blocked** | FK `NO ACTION` |
-| Item | outfits (`outfit_items`) | **Blocked** | FK `NO ACTION` |
-| Item | looks (`look_items`) | **Blocked** | FK `NO ACTION` |
-| Image of an item / look | its item / look | **Blocked** (delete the item/look first, then the image) | FK `NO ACTION` |
+| Subcategory | items | **Blocked** | FK `NO ACTION`, deferred |
+| Item | outfits (`outfit_items`) | **Blocked** | FK `NO ACTION`, deferred |
+| Item | looks (`look_items`) | **Blocked** | FK `NO ACTION`, deferred |
+| Image of an item / look | its item / look | **Blocked** (delete the item/look first, then the image) | FK `NO ACTION`, deferred |
 | Outfit | its `outfit_items` rows | Allowed, rows removed | `CASCADE` |
 | Look | its `look_items` rows | Allowed, rows removed | `CASCADE` |
 | Avatar / cover image | `users` | Allowed, profile falls back to initials | `SET NULL` |
 | Wishlist photo | `wishlist_items` | Allowed, card falls back to name + link | `SET NULL` |
 | User (account) | everything they own | Allowed, everything removed | `CASCADE` from `users` |
 
-**Why `NO ACTION` and not `RESTRICT`:** both block a direct delete. But `RESTRICT` checks immediately,
-row by row, so deleting a user (which cascades to both `items` and `images` in one statement) could fail
-depending on the order rows are removed. `NO ACTION` checks at the end of the statement, so account
-deletion works while single deletes are still blocked.
+**Why deferred `NO ACTION` and not `RESTRICT` or plain `NO ACTION`:** all three block a direct delete.
+But deleting a user cascades into `items`, `images`, `outfit_items`, `look_items` and `subcategories`, and
+Postgres runs each cascade step as its own internal statement. `RESTRICT` checks immediately, and plain
+`NO ACTION` checks at the end of each *step*, so account deletion fails whenever, for example, the cascade into
+`items` runs before the one into `outfit_items` (found in phase 2: it did fail). Deferred to COMMIT, the whole
+cascade finishes first, so account deletion works while single deletes are still blocked (the error then comes
+at COMMIT). The five deferred keys: `outfit_items → items`, `look_items → items`, `items → images`,
+`items → subcategories`, `looks → images`.
 
 The backend should **count usages first** and return a friendly message (e.g. *"This shirt is in 2 outfits
 and 1 look. Remove it from those first."*). The foreign keys are the safety net.
@@ -287,8 +291,10 @@ PK `(look_id, item_id)`; `→ looks` CASCADE; `→ items(id, user_id)` NO ACTION
 ## 4. Full schema (DDL)
 
 Run in this order. Migrations are managed with **Prisma Migrate**; this SQL is the reference.
-Parts Prisma's schema cannot express (citext extension, partial indexes, triggers) go into
-hand-written SQL migrations — see `02-backend.md`, section 4.
+Parts Prisma's schema cannot express (citext extension, CHECKs, partial indexes, deferrable foreign keys,
+triggers) go into hand-written SQL migrations — see `02-backend.md`, section 4.
+In the migrations, CHECKs are named `<table>_<column>_check` (both-or-neither city: `user_settings_city_coords_check`),
+and Prisma creates each `UNIQUE` as a unique index with the same name (it behaves the same for foreign keys and errors).
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS citext;
@@ -306,9 +312,9 @@ CREATE TABLE users (
   username         citext       NOT NULL UNIQUE CHECK (username ~ '^[a-z0-9_.]{3,24}$'),
   avatar_image_id  uuid,
   cover_image_id   uuid,
-  last_login_at    timestamptz,
-  created_at       timestamptz  NOT NULL DEFAULT now(),
-  updated_at       timestamptz  NOT NULL DEFAULT now()
+  last_login_at    timestamptz(3),
+  created_at       timestamptz(3)  NOT NULL DEFAULT now(),
+  updated_at       timestamptz(3)  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE images (
@@ -321,7 +327,7 @@ CREATE TABLE images (
   height      int          CHECK (height > 0),
   bytes       int          CHECK (bytes  > 0),
   format      varchar(10),
-  created_at  timestamptz  NOT NULL DEFAULT now(),
+  created_at  timestamptz(3)  NOT NULL DEFAULT now(),
   UNIQUE (id, user_id)
 );
 CREATE INDEX images_user_id_idx ON images (user_id);
@@ -338,7 +344,7 @@ CREATE TABLE user_settings (
   city_name     varchar(80),
   city_lat      numeric(8,5)  CHECK (city_lat BETWEEN -90 AND 90),
   city_lon      numeric(8,5)  CHECK (city_lon BETWEEN -180 AND 180),
-  updated_at    timestamptz   NOT NULL DEFAULT now(),
+  updated_at    timestamptz(3)   NOT NULL DEFAULT now(),
   CHECK ((city_lat IS NULL) = (city_lon IS NULL))
 );
 
@@ -349,10 +355,10 @@ CREATE TABLE refresh_tokens (
   family_id       uuid         NOT NULL,
   replaced_by_id  uuid         REFERENCES refresh_tokens(id) ON DELETE SET NULL,
   user_agent      text,
-  expires_at      timestamptz  NOT NULL,
-  revoked_at      timestamptz,
-  last_used_at    timestamptz,
-  created_at      timestamptz  NOT NULL DEFAULT now()
+  expires_at      timestamptz(3)  NOT NULL,
+  revoked_at      timestamptz(3),
+  last_used_at    timestamptz(3),
+  created_at      timestamptz(3)  NOT NULL DEFAULT now()
 );
 CREATE INDEX refresh_tokens_user_id_idx    ON refresh_tokens (user_id);
 CREATE INDEX refresh_tokens_family_id_idx  ON refresh_tokens (family_id);
@@ -366,7 +372,7 @@ CREATE TABLE categories (
   sort_order  smallint     NOT NULL UNIQUE,
   outfit_min  smallint     NOT NULL DEFAULT 0 CHECK (outfit_min >= 0),
   outfit_max  smallint     CHECK (outfit_max IS NULL OR outfit_max >= outfit_min),
-  created_at  timestamptz  NOT NULL DEFAULT now()
+  created_at  timestamptz(3)  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE subcategory_templates (
@@ -393,8 +399,8 @@ CREATE TABLE subcategories (
   category_id  uuid         NOT NULL REFERENCES categories(id),
   name         citext       NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 24),
   sort_order   smallint     NOT NULL DEFAULT 0,
-  created_at   timestamptz  NOT NULL DEFAULT now(),
-  updated_at   timestamptz  NOT NULL DEFAULT now(),
+  created_at   timestamptz(3)  NOT NULL DEFAULT now(),
+  updated_at   timestamptz(3)  NOT NULL DEFAULT now(),
   UNIQUE (user_id, category_id, name),
   UNIQUE (id, user_id, category_id)
 );
@@ -409,12 +415,14 @@ CREATE TABLE items (
   color_id        uuid         NOT NULL REFERENCES colors(id),
   image_id        uuid         NOT NULL UNIQUE,
   is_liked        boolean      NOT NULL DEFAULT false,
-  created_at      timestamptz  NOT NULL DEFAULT now(),
-  updated_at      timestamptz  NOT NULL DEFAULT now(),
+  created_at      timestamptz(3)  NOT NULL DEFAULT now(),
+  updated_at      timestamptz(3)  NOT NULL DEFAULT now(),
   CONSTRAINT items_subcategory_fk FOREIGN KEY (subcategory_id, user_id, category_id)
-    REFERENCES subcategories (id, user_id, category_id),            -- NO ACTION: blocks subcategory delete
+    REFERENCES subcategories (id, user_id, category_id)             -- NO ACTION: blocks subcategory delete
+    DEFERRABLE INITIALLY DEFERRED,
   CONSTRAINT items_image_fk FOREIGN KEY (image_id, user_id)
-    REFERENCES images (id, user_id),                                  -- NO ACTION
+    REFERENCES images (id, user_id)                                   -- NO ACTION
+    DEFERRABLE INITIALLY DEFERRED,
   UNIQUE (id, user_id),
   UNIQUE (id, user_id, category_id)
 );
@@ -429,8 +437,8 @@ CREATE TABLE outfits (
   user_id       uuid         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   is_favourite  boolean      NOT NULL DEFAULT false,
   signature     char(64),    -- set by check_outfit() at commit
-  created_at    timestamptz  NOT NULL DEFAULT now(),
-  updated_at    timestamptz  NOT NULL DEFAULT now(),
+  created_at    timestamptz(3)  NOT NULL DEFAULT now(),
+  updated_at    timestamptz(3)  NOT NULL DEFAULT now(),
   CONSTRAINT outfits_user_signature_key UNIQUE (user_id, signature),
   UNIQUE (id, user_id)
 );
@@ -445,6 +453,7 @@ CREATE TABLE outfit_items (
   PRIMARY KEY (outfit_id, item_id),
   FOREIGN KEY (outfit_id, user_id) REFERENCES outfits (id, user_id) ON DELETE CASCADE,
   FOREIGN KEY (item_id, user_id, category_id) REFERENCES items (id, user_id, category_id)   -- NO ACTION
+    DEFERRABLE INITIALLY DEFERRED
 );
 CREATE INDEX outfit_items_item_idx ON outfit_items (item_id, user_id, category_id);
 
@@ -453,9 +462,10 @@ CREATE TABLE looks (
   id          uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   image_id    uuid         NOT NULL UNIQUE,
-  created_at  timestamptz  NOT NULL DEFAULT now(),
-  updated_at  timestamptz  NOT NULL DEFAULT now(),
-  FOREIGN KEY (image_id, user_id) REFERENCES images (id, user_id),   -- NO ACTION
+  created_at  timestamptz(3)  NOT NULL DEFAULT now(),
+  updated_at  timestamptz(3)  NOT NULL DEFAULT now(),
+  FOREIGN KEY (image_id, user_id) REFERENCES images (id, user_id)    -- NO ACTION
+    DEFERRABLE INITIALLY DEFERRED,
   UNIQUE (id, user_id)
 );
 CREATE INDEX looks_user_created_idx ON looks (user_id, created_at DESC, id);
@@ -467,6 +477,7 @@ CREATE TABLE look_items (
   PRIMARY KEY (look_id, item_id),
   FOREIGN KEY (look_id, user_id) REFERENCES looks (id, user_id) ON DELETE CASCADE,
   FOREIGN KEY (item_id, user_id) REFERENCES items (id, user_id)    -- NO ACTION
+    DEFERRABLE INITIALLY DEFERRED
 );
 CREATE INDEX look_items_item_idx ON look_items (item_id, user_id);
 
@@ -478,8 +489,8 @@ CREATE TABLE wishlist_items (
   site_name     varchar(60)   NOT NULL,
   product_name  varchar(200)  NOT NULL,
   image_id      uuid          UNIQUE REFERENCES images(id) ON DELETE SET NULL,
-  created_at    timestamptz   NOT NULL DEFAULT now(),
-  updated_at    timestamptz   NOT NULL DEFAULT now(),
+  created_at    timestamptz(3)   NOT NULL DEFAULT now(),
+  updated_at    timestamptz(3)   NOT NULL DEFAULT now(),
   CONSTRAINT wishlist_user_url_key UNIQUE (user_id, url)
 );
 CREATE INDEX wishlist_user_created_idx ON wishlist_items (user_id, created_at DESC, id);
@@ -574,7 +585,7 @@ CREATE CONSTRAINT TRIGGER outfits_check
 
 ## 6. Seed data
 
-Seeded once by a migration. Users never write to these tables.
+Inserted by `prisma/seed.ts` (`npm run db:seed`), which upserts every row (categories and colours by slug, templates by category + name), so it is safe to re-run. Users never write to these tables.
 
 ### 6.1 `categories`
 
@@ -688,11 +699,11 @@ Seeded once by a migration. Users never write to these tables.
 | 23505 | `subcategories_user_id_category_id_name_key` | "\"Kurtas\" already exists in Tops." |
 | 23505 | `outfits_user_signature_key` | "You already saved this outfit." |
 | 23505 | `wishlist_user_url_key` | "Already in your wishlist." |
-| 23503 | FK on delete (item / subcategory in use) | "This is still used in … Remove it from there first." (backend normally catches this earlier by counting) |
+| 23503 | FK on delete (item / subcategory in use), raised at COMMIT: `outfit_items_item_id_user_id_category_id_fkey`, `look_items_item_id_user_id_fkey` → item in use; `items_subcategory_fk` → subcategory in use | "This is still used in … Remove it from there first." (backend normally catches this earlier by counting) |
 | 23514 | `check_outfit()` | "An outfit needs 1 top and 1 bottom, and at most 1 pair of shoes." |
 | 23514 | other CHECKs | Validation error for the field |
 
-Constraint names above are Postgres defaults or names set in the DDL. Verify them after the first migration.
+Constraint names above are Postgres defaults or names set in the DDL. Verified against the database after the phase 2 migrations.
 
 ---
 
@@ -714,3 +725,7 @@ Constraint names above are Postgres defaults or names set in the DDL. Verify the
 | Email | No verification or password reset in v1 |
 | Outfit builder rows | Fixed 30 / 60 / 10 (UI, not stored) |
 | Dates | Never shown in the UI |
+| Engine version | PostgreSQL 18 (what Neon runs; was written as 16) |
+| Timestamps | `timestamptz(3)` (milliseconds) so pagination cursors built from JavaScript dates are exact |
+| Block foreign keys | `NO ACTION` + `DEFERRABLE INITIALLY DEFERRED` (checked at COMMIT), because plain `NO ACTION` made account deletion fail (section 2) |
+| Seed data | `prisma/seed.ts`, re-runnable upserts (not a migration) |

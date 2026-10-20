@@ -43,8 +43,10 @@ server/
 ├── prisma/
 │   ├── schema.prisma              models matching 01-database.md
 │   ├── migrations/                Prisma + hand-written SQL migrations
-│   └── seed.ts                    categories, colors, subcategory_templates
+│   ├── seed.ts                    categories, colors, subcategory_templates
+│   └── checks/                    manual SQL checks for 01's rules (npm run db:check, needs psql)
 ├── src/
+│   ├── generated/prisma/          generated Prisma client (not committed; prisma generate on install)
 │   ├── server.ts                  starts the HTTP server
 │   ├── app.ts                     builds the Express app (middleware + routes)
 │   ├── config/
@@ -98,7 +100,9 @@ server/
 │       └── express.d.ts           adds req.user to Express's Request type
 ├── .env.example
 ├── package.json
-└── tsconfig.json
+├── prisma.config.ts               Prisma CLI config (schema, migrations, seed, DIRECT_URL)
+├── tsconfig.json                  type-checks everything (src, prisma, config)
+└── tsconfig.build.json            builds src/ to dist/
 ```
 
 Layer rules:
@@ -128,18 +132,28 @@ Layer rules:
 
 ## 4. Prisma notes
 
+- **Prisma 7** (7.10.1): `prisma.config.ts` holds the CLI settings; the app connects through the
+  `@prisma/adapter-pg` driver adapter; the client is generated into `src/generated/prisma`.
 - `schema.prisma` models every table, column, enum, composite foreign key and `@@unique` in `01-database.md`.
   Map names with `@@map`/`@map` so the database stays snake_case and the code is camelCase.
-- `onDelete` per `01-database.md` §2: `Cascade`, `NoAction` (the "block" rule) or `SetNull`.
-- Use `@db.Citext` for `email`, `username` and subcategory `name`, `@db.Char(64)` for `signature`, etc.
+- `onDelete` per `01-database.md` §2: `Cascade`, `NoAction` (the "block" rule) or `SetNull`, set explicitly on
+  every relation (Prisma's default for required relations is `Restrict`), with `onUpdate: NoAction` to match the DDL.
+- Use `@db.Citext` for `email`, `username` and subcategory `name`, `@db.Char(64)` for `signature`,
+  `@db.Timestamptz(3)` for every timestamp (01 §1), and `dbgenerated("gen_random_uuid()")` for ids.
 - **Hand-written SQL migrations** (create with `prisma migrate dev --create-only`, then add the SQL):
   1. `CREATE EXTENSION IF NOT EXISTS citext;` (the first migration, before any table)
   2. Partial indexes: `items_user_liked_idx`, `outfits_user_fav_idx`
   3. CHECK constraints Prisma can't express (username regex, name lengths, hex, url, lat/lon, both-or-neither city)
   4. `set_updated_at()` + its triggers, and `check_outfit()` + its two constraint triggers (01 §5)
+  5. The five "block" foreign keys made `DEFERRABLE INITIALLY DEFERRED` (01 §2)
+
+  In the repo: `20261020000001_citext`, `…0002_tables` (generated), `…0003_checks_and_partial_indexes`,
+  `…0004_triggers`, `…0005_deferred_block_fks`.
 - Prisma doesn't know about the partial indexes. **Review every generated migration** and delete any
   `DROP INDEX` lines that target them.
-- Neon: `DATABASE_URL` = pooled connection string (used by the app), `DIRECT_URL` = direct connection (used by migrations).
+- Neon: `DATABASE_URL` = pooled connection string (used by the app), `DIRECT_URL` = direct connection (used by migrations, the seed and `db:check`).
+  Both use `sslmode=verify-full` (the `pg` driver warns that `require` will change meaning in its next major version).
+- Scripts: `db:migrate` (`migrate dev`), `db:deploy`, `db:seed`, `db:reset`, `db:check`, `db:generate`.
 - `prisma/seed.ts` inserts the seed data from 01 §6 and is safe to re-run (upsert by slug).
 
 ---
@@ -473,8 +487,8 @@ NODE_ENV=development
 PORT=4000
 CLIENT_URL=http://localhost:5173
 
-DATABASE_URL=postgresql://...-pooler.../wardrobe?sslmode=require   # Neon pooled
-DIRECT_URL=postgresql://.../wardrobe?sslmode=require                # Neon direct (migrations)
+DATABASE_URL=postgresql://...-pooler.../wardrobe?sslmode=verify-full   # Neon pooled
+DIRECT_URL=postgresql://.../wardrobe?sslmode=verify-full                # Neon direct (migrations)
 
 JWT_ACCESS_SECRET=change-me-64-random-chars
 ACCESS_TOKEN_TTL=15m

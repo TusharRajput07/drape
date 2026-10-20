@@ -1,0 +1,310 @@
+// Drape database schema. Source of truth: spec/01-database.md.
+// Code names are camelCase; the database stays snake_case (@map / @@map).
+// Not expressible here (hand-written SQL migrations, see spec/02-backend.md §4):
+// the citext extension, CHECK constraints, partial indexes and triggers.
+// Every relation sets onDelete/onUpdate explicitly to match the DDL ("block" = NoAction).
+// Timestamps are timestamptz(3): JavaScript dates hold milliseconds, so cursors stay exact.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AccentColor {
+  black
+  sage
+  blue
+  clay
+  plum
+
+  @@map("accent_color")
+}
+
+enum ImageKind {
+  item
+  look
+  avatar
+  cover
+  wishlist
+
+  @@map("image_kind")
+}
+
+// ---- Account ----------------------------------------------------------------
+
+model User {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String    @unique @db.Citext
+  passwordHash  String    @map("password_hash")
+  name          String    @db.VarChar(60)
+  username      String    @unique @db.Citext
+  avatarImageId String?   @map("avatar_image_id") @db.Uuid
+  coverImageId  String?   @map("cover_image_id") @db.Uuid
+  lastLoginAt   DateTime? @map("last_login_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  avatar Image? @relation("UserAvatar", fields: [avatarImageId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "users_avatar_fk")
+  cover  Image? @relation("UserCover", fields: [coverImageId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "users_cover_fk")
+
+  settings      UserSettings?
+  refreshTokens RefreshToken[]
+  images        Image[]        @relation("ImageOwner")
+  subcategories Subcategory[]
+  items         Item[]
+  outfits       Outfit[]
+  looks         Look[]
+  wishlistItems WishlistItem[]
+
+  @@map("users")
+}
+
+model UserSettings {
+  userId      String      @id @map("user_id") @db.Uuid
+  accent      AccentColor @default(plum)
+  tempUnit    String      @default("C") @map("temp_unit") @db.Char(1)
+  useLocation Boolean     @default(true) @map("use_location")
+  cityName    String?     @map("city_name") @db.VarChar(80)
+  cityLat     Decimal?    @map("city_lat") @db.Decimal(8, 5)
+  cityLon     Decimal?    @map("city_lon") @db.Decimal(8, 5)
+  updatedAt   DateTime    @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("user_settings")
+}
+
+model RefreshToken {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  familyId     String    @map("family_id") @db.Uuid
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  userAgent    String?   @map("user_agent")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  lastUsedAt   DateTime? @map("last_used_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  replacedBy RefreshToken?  @relation("Rotation", fields: [replacedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  replaces   RefreshToken[] @relation("Rotation")
+
+  @@index([userId], map: "refresh_tokens_user_id_idx")
+  @@index([familyId], map: "refresh_tokens_family_id_idx")
+  @@index([expiresAt], map: "refresh_tokens_expires_at_idx")
+  @@map("refresh_tokens")
+}
+
+// ---- Files ------------------------------------------------------------------
+
+model Image {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  kind      ImageKind
+  publicId  String    @unique @map("public_id")
+  url       String
+  width     Int?
+  height    Int?
+  bytes     Int?
+  format    String?   @db.VarChar(10)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation("ImageOwner", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  avatarOf     User[]        @relation("UserAvatar")
+  coverOf      User[]        @relation("UserCover")
+  // image_id is UNIQUE on items and looks; Prisma models these as lists because their
+  // composite FKs (image_id, user_id) aren't themselves unique.
+  items        Item[]
+  looks        Look[]
+  wishlistItem WishlistItem?
+
+  @@unique([id, userId])
+  @@index([userId], map: "images_user_id_idx")
+  @@map("images")
+}
+
+// ---- Shared lookups (seeded) --------------------------------------------------
+
+model Category {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String   @unique @db.VarChar(20)
+  name      String   @db.VarChar(40)
+  sortOrder Int      @unique @map("sort_order") @db.SmallInt
+  outfitMin Int      @default(0) @map("outfit_min") @db.SmallInt
+  outfitMax Int?     @map("outfit_max") @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subcategoryTemplates SubcategoryTemplate[]
+  subcategories        Subcategory[]
+  items                Item[]
+
+  @@map("categories")
+}
+
+model SubcategoryTemplate {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId String @map("category_id") @db.Uuid
+  name       String @db.Citext
+  sortOrder  Int    @default(0) @map("sort_order") @db.SmallInt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([categoryId, name])
+  @@map("subcategory_templates")
+}
+
+model Color {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String  @unique @db.VarChar(20)
+  name      String  @db.VarChar(30)
+  hex       String  @db.Char(7)
+  isNeutral Boolean @default(false) @map("is_neutral")
+  sortOrder Int     @unique @map("sort_order") @db.SmallInt
+
+  items Item[]
+
+  @@map("colors")
+}
+
+// ---- Per-user lookup ------------------------------------------------------------
+
+model Subcategory {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  name       String   @db.Citext
+  sortOrder  Int      @default(0) @map("sort_order") @db.SmallInt
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  items Item[]
+
+  @@unique([userId, categoryId, name])
+  @@unique([id, userId, categoryId])
+  @@index([userId, categoryId], map: "subcategories_user_category_idx")
+  @@map("subcategories")
+}
+
+// ---- Wardrobe -------------------------------------------------------------------
+
+model Item {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  categoryId    String   @map("category_id") @db.Uuid
+  subcategoryId String   @map("subcategory_id") @db.Uuid
+  colorId       String   @map("color_id") @db.Uuid
+  imageId       String   @unique @map("image_id") @db.Uuid
+  isLiked       Boolean  @default(false) @map("is_liked")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // The subcategory must be the user's own and under the same category.
+  subcategory Subcategory @relation(fields: [subcategoryId, userId, categoryId], references: [id, userId, categoryId], onDelete: NoAction, onUpdate: NoAction, map: "items_subcategory_fk")
+  color       Color       @relation(fields: [colorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  image       Image       @relation(fields: [imageId, userId], references: [id, userId], onDelete: NoAction, onUpdate: NoAction, map: "items_image_fk")
+
+  outfitItems OutfitItem[]
+  lookItems   LookItem[]
+
+  @@unique([id, userId])
+  @@unique([id, userId, categoryId])
+  @@index([userId, categoryId, createdAt(sort: Desc), id], map: "items_user_category_created_idx")
+  @@index([subcategoryId, userId, categoryId], map: "items_subcategory_idx")
+  @@index([userId, colorId], map: "items_user_color_idx")
+  // items_user_liked_idx (partial, WHERE is_liked) lives in a hand-written migration.
+  @@map("items")
+}
+
+model Outfit {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  isFavourite Boolean  @default(false) @map("is_favourite")
+  // Set by the check_outfit() trigger at commit; never written by the app.
+  signature   String?  @db.Char(64)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  items OutfitItem[]
+
+  @@unique([userId, signature], map: "outfits_user_signature_key")
+  @@unique([id, userId])
+  @@index([userId, createdAt(sort: Desc), id], map: "outfits_user_created_idx")
+  // outfits_user_fav_idx (partial, WHERE is_favourite) lives in a hand-written migration.
+  @@map("outfits")
+}
+
+model OutfitItem {
+  outfitId   String @map("outfit_id") @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+  itemId     String @map("item_id") @db.Uuid
+  categoryId String @map("category_id") @db.Uuid
+
+  outfit Outfit @relation(fields: [outfitId, userId], references: [id, userId], onDelete: Cascade, onUpdate: NoAction)
+  item   Item   @relation(fields: [itemId, userId, categoryId], references: [id, userId, categoryId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([outfitId, itemId])
+  @@index([itemId, userId, categoryId], map: "outfit_items_item_idx")
+  @@map("outfit_items")
+}
+
+model Look {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  imageId   String   @unique @map("image_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  image Image @relation(fields: [imageId, userId], references: [id, userId], onDelete: NoAction, onUpdate: NoAction)
+
+  items LookItem[]
+
+  @@unique([id, userId])
+  @@index([userId, createdAt(sort: Desc), id], map: "looks_user_created_idx")
+  @@map("looks")
+}
+
+model LookItem {
+  lookId String @map("look_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  itemId String @map("item_id") @db.Uuid
+
+  look Look @relation(fields: [lookId, userId], references: [id, userId], onDelete: Cascade, onUpdate: NoAction)
+  item Item @relation(fields: [itemId, userId], references: [id, userId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([lookId, itemId])
+  @@index([itemId, userId], map: "look_items_item_idx")
+  @@map("look_items")
+}
+
+model WishlistItem {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  url         String
+  siteName    String   @map("site_name") @db.VarChar(60)
+  productName String   @map("product_name") @db.VarChar(200)
+  // Plain FK (not composite): wishlist photos are always created by the server (01 §3.14).
+  imageId     String?  @unique @map("image_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  image Image? @relation(fields: [imageId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([userId, url], map: "wishlist_user_url_key")
+  @@index([userId, createdAt(sort: Desc), id], map: "wishlist_user_created_idx")
+  @@map("wishlist_items")
+}
