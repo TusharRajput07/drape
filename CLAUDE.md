@@ -38,7 +38,7 @@ Its background removal, weather, wishlist fetching and storage are fake.
   shadcn/ui + Tailwind, lucide-react, sonner, vite-plugin-pwa
 - `server/`: Node 24 LTS + TypeScript, Express 5, Zod, Prisma (+ hand-written SQL migrations), JWT + rotating refresh tokens
 - Database: PostgreSQL on Neon. Images: Cloudinary (direct browser upload with a server signature)
-- Weather: Open-Meteo. Background removal: in the browser (`@imgly/background-removal`, pending the phase 1 test)
+- Weather: Open-Meteo. Background removal: in the browser (`@imgly/background-removal`, default model, WebGPU with CPU fallback; 03 §9.1)
 
 ## Rules that must always hold
 

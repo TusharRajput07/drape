@@ -22,7 +22,7 @@ The approved prototype is the visual reference for every screen: `prototype/inde
 | Icons | lucide-react |
 | Toasts | sonner (shadcn's toast) |
 | Font | Inter (Google Fonts), fallback `system-ui` |
-| Background removal | `@imgly/background-removal` (AGPL — fine, repo is public). Confirmed by the test in §9.1 |
+| Background removal | `@imgly/background-removal` (AGPL — fine, repo is public), default model, WebGPU with CPU fallback. Chosen by the test in §9.1 |
 | PWA | `vite-plugin-pwa`: **installable only** (no offline data) |
 
 ---
@@ -195,8 +195,12 @@ The prototype is the visual reference. These are the rules to keep.
 ### 6.4 Upload flow (the + sheet → Upload clothes)
 1. Pick a category (4 options with the fixed images).
 2. Pick a photo (`<input type="file" accept="image/*">`). HEIC or other undecodable formats → "Try a JPG or PNG".
+   - A one-line tip above the photo button, in small grey (`--muted`) text: "For the best cutout, lay it flat on a plain floor or sheet."
+   - The photo is decoded with the phone's built-in orientation (EXIF) applied automatically, so it never shows up sideways.
 3. **Preview:**
    - **"Remove background" switch**: on by default, auto-off if the image already has transparency (§9).
+   - **Rotate button**: each tap turns the photo 90° clockwise. The rotation is applied to the photo itself **before**
+     background removal and colour detection (both re-run after a rotate), so the saved cutout is upright.
    - Checkered preview background.
    - **Subcategory picker (required)** with "+ New"; Save stays disabled until one is picked.
    - Detected **colour chip** ("Navy · detected · Change").
@@ -307,9 +311,11 @@ The prototype is the visual reference. These are the rules to keep.
 ## 9. Background removal and colour detection (`features/upload/`)
 
 - `@imgly/background-removal` is **lazy-loaded** with a dynamic `import()` only when the upload preview opens, so it never slows the rest of the app.
-- **First use on a device:** the model downloads once (~40–80 MB). Show "Getting the background remover ready…" with a progress bar from the library's progress callback.
+- **Model:** the library's **default model** (`isnet_fp16`), chosen in §9.1.
+- **First use on a device:** the model downloads once (~88 MB, plus ~12–23 MB of runtime WASM). Show "Getting the background remover ready…" with a progress bar from the library's progress callback.
   The PWA service worker caches the model files, so later uploads skip this.
-- Runs on the phone in the browser. Typical time is a few seconds; show a spinner.
+- **Runs on the phone in the browser** with `device: 'gpu'` (WebGPU). The library falls back to the CPU (WASM, multi-threaded when the page is cross-origin isolated) automatically when WebGPU isn't available.
+  Typical time is 2–4 s on a phone GPU, ~15 s on a phone CPU (§9.1); show a spinner. The model is loaded once per session and reused for every photo.
 - **Transparency check** (`lib/image.ts`): if more than 1% of sampled pixels are already see-through, the switch starts **off** with the note "Your photo already has a see-through background."
 - Switch off → the photo is saved as-is (still compressed).
 - **Colour detection** (`lib/color-detect.ts`): ported from the prototype.
@@ -317,14 +323,35 @@ The prototype is the visual reference. These are the rules to keep.
   2. Match each to the nearest of the 16 colours from `GET /colors` (redmean RGB distance).
   3. The most common one wins.
 
-  Re-runs when the switch changes, unless the user picked a colour by hand.
+  Re-runs when the switch changes or the photo is rotated, unless the user picked a colour by hand.
 
-### 9.1 First development task: model test
+### 9.1 Model test (phase 1): result
 
-Before building the upload screen, make a throwaway page that runs `@imgly/background-removal`
-(default and smaller model variants) on **10 of the owner's real clothes photos** and shows the results side by side.
-Keep the library if the owner is happy with the results. If not, try other browser models (e.g. BiRefNet/RMBG via transformers.js) the same way.
-Record the choice in this section.
+A throwaway page ran `@imgly/background-removal` 1.7.0 on **10 of the owner's real clothes photos** (about 1.2 MP each),
+comparing the default model (`isnet_fp16`, ~88 MB) with the small one (`isnet_quint8`, ~44 MB). The page was then deleted.
+
+**Decision:**
+- Use `@imgly/background-removal` with the **default model** (`isnet_fp16`). The small model's cutouts weren't good enough.
+- Run on **WebGPU** (`device: 'gpu'`), with the library's automatic fallback to the **multi-threaded CPU**.
+
+**Quality:** good on plain backgrounds (clothes laid flat on a floor work well), poor on busy ones. Hence the tip in §6.4.
+
+**Measured times** (per photo, model only; default model):
+
+| Device | GPU (WebGPU) | CPU (WASM, multi-threaded) |
+|---|---|---|
+| Laptop (Chrome, Intel GPU, 8 cores) | ~2.4 s | ~8 s |
+| Owner's phone | 2–4 s | ~15 s |
+
+- The **first photo** after loading is slower (laptop: ~8 s GPU, ~13 s CPU) while the engine warms up.
+- The **model downloads once** per device (then cached); loading it into memory takes ~6–10 s once per session.
+- Without cross-origin isolation the CPU runs on **one thread**: ~25 s per photo, even on the laptop.
+
+**Requirements this creates** (see the open item in §12):
+- **WebGPU** needs a secure context (HTTPS; `localhost` is fine in development).
+- **The multi-threaded CPU fallback** also needs cross-origin isolation:
+  `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy`.
+- Testing on a phone during development therefore needs HTTPS on the dev server too.
 
 ---
 
@@ -364,5 +391,5 @@ Copy rules: short, plain, active voice; errors say what to do next; no dates; no
 | Topic | Note |
 |---|---|
 | Category tab photos | Owner supplies 5 real photos (all, top, bottom, shoes, accessory) |
-| Background-removal model | Confirm with the test in §9.1 |
+| HTTPS + cross-origin isolation | **Open, decide in phase 6 / with hosting.** Background removal needs HTTPS (WebGPU) and COOP/COEP headers (multi-threaded CPU fallback), §9.1. Decide: isolate the whole app or not; `require-corp` vs `credentialless`; how Cloudinary images (items, looks, avatar, cover, wishlist photos) and other cross-origin files (fonts, model files) still load under COEP (CORS / `crossorigin` attribute or CORP headers); HTTPS for phone testing in development. Without isolation, WebGPU still works but the CPU fallback is single-threaded (~25 s+) |
 | Hosting | Decided later. Affects `VITE_API_URL` and the cookie `SameSite` setting |

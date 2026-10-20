@@ -72,7 +72,7 @@ The prototype's background removal, weather, wishlist fetching and storage are f
 | Backend | Node 24 LTS + TypeScript, Express 5, Zod, Prisma, JWT + rotating refresh tokens |
 | Database | PostgreSQL on Neon (free) |
 | Images | Cloudinary (free); browser uploads directly with a server-signed request |
-| Background removal | In the browser (`@imgly/background-removal`, confirmed by the phase 1 test) |
+| Background removal | In the browser: `@imgly/background-removal`, default model, WebGPU with multi-threaded CPU fallback (chosen in phase 1, 03 §9.1) |
 | Weather | Open-Meteo (free, no key) |
 | Repo | One public repository: `client/`, `server/`, `spec/`, `prototype/` |
 
@@ -140,7 +140,8 @@ Don't start a phase until the previous one is done.
 
 ### Phase 6 — Closet and upload
 - Profile header, category tabs, infinite grid, filter sheet, item detail sheet.
-- Upload flow: background removal (lazy-loaded, first-use progress), transparency check, subcategory picker with "+ New", colour detection, compression, direct Cloudinary upload, save.
+- Upload flow: photo tip, EXIF orientation + rotate button (before removal), background removal (lazy-loaded, first-use progress, WebGPU with CPU fallback), transparency check, subcategory picker with "+ New", colour detection, compression, direct Cloudinary upload, save.
+- Decide HTTPS + cross-origin isolation for background removal first (open item in §7 and 03 §12).
 
 **Done when:** an item can be uploaded with and without background removal, appears on the right tab, and can be liked, re-categorised, filtered and deleted (or blocked when used).
 
@@ -192,7 +193,7 @@ Don't start a phase until the previous one is done.
 | Item | Owner | Needed by |
 |---|---|---|
 | 5 category tab photos (all, top, bottom, shoes, accessory) | Owner | Phase 6 |
-| 10 clothes photos for the model test | Owner | Phase 1 |
+| HTTPS + cross-origin isolation (COOP/COEP) for background removal, incl. the effect on Cloudinary and wishlist images (03 §12) | Owner + Claude | Phase 6 / hosting |
 | Hosting choice | Owner + Claude | Phase 10 |
 
 ---
@@ -207,3 +208,5 @@ Don't start a phase until the previous one is done.
 | Phase 0 server files | The envelope helper, `AppError`, `not-found`, `error-handler` and `config/env.ts` are built to their final spec in phase 0 (needed for the 404 check); phase 3 adds the rest |
 | Dependencies | Installed per phase, only when first used |
 | Formatting / linting | Prettier with one shared config at the root for both apps (`npm run format`); the client keeps the linter Vite's template ships (oxlint, `npm run lint`) |
+| Background removal | `@imgly/background-removal`, **default model** (`isnet_fp16`); the small model wasn't good enough. Runs on WebGPU (`device: 'gpu'`) with automatic fallback to the multi-threaded CPU. Measured per photo: laptop GPU ~2.4 s, laptop CPU ~8 s, phone GPU 2–4 s, phone CPU ~15 s; first photo slower; model downloads once. Needs HTTPS + cross-origin isolation (open item). Details in 03 §9.1 |
+| Upload photo handling | Tip "For the best cutout, lay it flat on a plain floor or sheet." above the photo button; EXIF orientation applied automatically; a rotate button (90° clockwise per tap) applied before background removal and colour detection (03 §6.4) |
