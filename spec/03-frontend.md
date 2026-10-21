@@ -34,7 +34,7 @@ client/
 ├── public/
 │   ├── categories/               fixed tab images: all.webp, top.webp, bottom.webp, shoes.webp, accessory.webp
 │   │                             (real product photos supplied by the owner)
-│   └── icons/                    PWA icons 192/512 + maskable
+│   └── icons/                    PWA icons: icon.svg (also the favicon), icon-192/512.png, maskable-512.png
 ├── src/
 │   ├── main.tsx                  React root, QueryClientProvider, RouterProvider, Toaster
 │   ├── app/
@@ -51,11 +51,17 @@ client/
 │   │   ├── cloudinary.ts         signed direct upload with progress
 │   │   ├── image.ts              resize/compress to WebP, transparency check
 │   │   ├── color-detect.ts       nearest-palette colour detection (ported from the prototype)
+│   │   ├── accent.ts             accent colour table (§7) + applyAccent()
+│   │   ├── use-online.ts         online/offline hook (offline screen, session check)
 │   │   └── utils.ts              cn() etc. (shadcn)
 │   ├── components/
 │   │   ├── ui/                   shadcn components (button, sheet, dialog, input, switch, select, tabs…)
 │   │   ├── BottomNav.tsx
 │   │   ├── PageHeader.tsx        title left, action button right (the agreed header pattern)
+│   │   ├── FormField.tsx         label + input + error under it
+│   │   ├── FullScreenLoader.tsx  shown while the session check runs
+│   │   ├── OfflineScreen.tsx     "You're offline" (§10)
+│   │   ├── HangerIcon.tsx        the prototype's hanger (lucide has none)
 │   │   ├── ItemCard.tsx          photo + heart
 │   │   ├── ItemGrid.tsx          infinite-scroll grid
 │   │   ├── OutfitFigure.tsx      stacked top/bottom/shoes + accessory circles
@@ -80,7 +86,7 @@ client/
 │   │   └── globals.css           Tailwind + CSS variables (§7)
 │   └── vite-env.d.ts
 ├── index.html
-├── vite.config.ts                React + PWA plugins, `@` alias to src
+├── vite.config.ts                React + Tailwind + PWA plugins, `@` alias to src, `/api` forwarded to the server, `phone` mode
 ├── components.json               shadcn config
 ├── .env.example                  VITE_API_URL=http://localhost:4000/api/v1
 └── tsconfig.json
@@ -162,6 +168,10 @@ Query keys:
   - `401 SESSION_EXPIRED` / `UNAUTHENTICATED` after a refresh attempt: clear the auth store and the query cache, then navigate to `/login`.
   - Other errors: reject with a typed `ApiError { status, code, message, details }`.
 - **App start:** `ProtectedRoute` shows a full-screen loader while `status === 'unknown'`, calls `/auth/refresh`, then sets `authed` or `guest`.
+  `AuthLayout` (login/signup) runs the same check and sends a logged-in user to `/`. If the phone is offline the status stays
+  `unknown` (the offline screen shows) and the check runs again once it's back online; any other failure counts as `guest`.
+- **Session end** = clear the store and the query cache; `ProtectedRoute` then redirects to `/login` (no separate navigate call).
+- After login/signup the returned `user` fills the `['me']` cache; `me.settings.accent` is applied to the CSS variables. Login/signup pages use plum.
 - **Logout:** `POST /auth/logout`, then clear the store and cache, then go to `/login`.
 
 ---
@@ -172,6 +182,8 @@ The prototype is the visual reference. These are the rules to keep.
 
 ### 6.1 Login / Signup
 - Signup: name, username (3–24, `a–z 0–9 _ .`), email, password (8–72). Zod in the form, matching the server rules.
+- A centred card (the prototype has no login screen): "Drape" above it, the form inside, a link to the other page below the button.
+- Login: `INVALID_CREDENTIALS` shows above the button ("Wrong email or password.").
 - Server errors `EMAIL_TAKEN` / `USERNAME_TAKEN` show under the matching field.
 
 ### 6.2 Home (closet)
@@ -351,7 +363,7 @@ comparing the default model (`isnet_fp16`, ~88 MB) with the small one (`isnet_qu
 - **WebGPU** needs a secure context (HTTPS; `localhost` is fine in development).
 - **The multi-threaded CPU fallback** also needs cross-origin isolation:
   `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy`.
-- Testing on a phone during development therefore needs HTTPS on the dev server too.
+- Testing on a phone during development therefore needs HTTPS too (the Cloudflare tunnel, §10.1).
 
 ---
 
@@ -364,7 +376,17 @@ comparing the default model (`isnet_fp16`, ~88 MB) with the small one (`isnet_qu
   - Icons 192, 512 and maskable 512.
 - **Service worker caches:** the app shell (JS/CSS/fonts/HTML), the category images, and the background-removal model/WASM files (cache-first, long expiry).
 - **Not cached:** API responses and Cloudinary images. The app needs internet for data (offline browsing is out of scope).
-- If the app is opened offline: a simple "You're offline" screen.
+- If the app is opened offline: a simple "You're offline" screen. It also covers the app whenever the phone goes offline, and goes away when it's back.
+- The service worker only runs in the built app (`npm run phone`), not in `npm run dev`.
+- The model/WASM caching rule is added in phase 6 together with `@imgly/background-removal`.
+
+### 10.1 Trying it on a phone (development)
+
+Installing needs HTTPS the phone trusts (a self-signed certificate isn't enough), and the refresh cookie is `Secure`.
+`npm run phone` (root) starts the API, builds the client in `phone` mode (`VITE_API_URL=/api/v1`), serves it with `vite preview`
+on port 4173 (which forwards `/api` to the server, so the app and API share one address) and opens a **Cloudflare quick tunnel**
+(`cloudflared`, installed once with `winget install Cloudflare.cloudflared`, not in the repo). The phone opens the printed
+`https://….trycloudflare.com` address. It's public while the command runs and changes every run.
 
 ---
 
@@ -391,5 +413,5 @@ Copy rules: short, plain, active voice; errors say what to do next; no dates; no
 | Topic | Note |
 |---|---|
 | Category tab photos | Owner supplies 5 real photos (all, top, bottom, shoes, accessory) |
-| HTTPS + cross-origin isolation | **Open, decide in phase 6 / with hosting.** Background removal needs HTTPS (WebGPU) and COOP/COEP headers (multi-threaded CPU fallback), §9.1. Decide: isolate the whole app or not; `require-corp` vs `credentialless`; how Cloudinary images (items, looks, avatar, cover, wishlist photos) and other cross-origin files (fonts, model files) still load under COEP (CORS / `crossorigin` attribute or CORP headers); HTTPS for phone testing in development. Without isolation, WebGPU still works but the CPU fallback is single-threaded (~25 s+) |
+| HTTPS + cross-origin isolation | **Open, decide in phase 6 / with hosting.** Background removal needs HTTPS (WebGPU) and COOP/COEP headers (multi-threaded CPU fallback), §9.1. Decide: isolate the whole app or not; `require-corp` vs `credentialless`; how Cloudinary images (items, looks, avatar, cover, wishlist photos) and other cross-origin files (fonts, model files) still load under COEP (CORS / `crossorigin` attribute or CORP headers). (HTTPS for phone testing in development is decided: the Cloudflare tunnel, §10.1.) Without isolation, WebGPU still works but the CPU fallback is single-threaded (~25 s+) |
 | Hosting | Decided later. Affects `VITE_API_URL` and the cookie `SameSite` setting |

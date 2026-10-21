@@ -11,7 +11,8 @@
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "phone": "concurrently -k -n server,client,tunnel -c magenta,cyan,yellow \"npm:dev:server\" \"npm --prefix client run phone\" \"cloudflared tunnel --url http://localhost:4173\""
   },
   "devDependencies": {
     "concurrently": "^10.0.6",

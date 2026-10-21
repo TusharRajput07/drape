@@ -19,3 +19,14 @@ Needs Node 24 LTS.
 3. Start both apps: `npm run dev`
 
 Format the code with `npm run format`.
+
+## Try it on your phone
+
+Installing the app needs HTTPS the phone trusts, so the phone reaches your laptop through a temporary
+Cloudflare tunnel.
+
+1. Once: install the tunnel tool with `winget install Cloudflare.cloudflared` (no account needed).
+2. Run `npm run phone`. It starts the API, builds the app, serves it on http://localhost:4173 (the app forwards
+   `/api` to the API) and opens a tunnel.
+3. Open the `https://….trycloudflare.com` address it prints on your phone. The address is public while the
+   command runs and changes every time.
