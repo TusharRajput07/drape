@@ -185,7 +185,7 @@ Don't start a phase until the previous one is done.
    - Passwords are only stored hashed.
    - Refresh tokens are only stored hashed.
    - Validate every input with Zod.
-7. **No dates in the UI.** No logging beyond `console.error` for errors.
+7. **No dates in the UI.** No logging beyond `console.error` for errors (and the server's one "API ready" line at start-up).
 
 ---
 
@@ -206,7 +206,7 @@ Don't start a phase until the previous one is done.
 |---|---|
 | Node version | Node 24 LTS (was 22) for both apps; `engines` set in each `package.json` |
 | Dev command | Root `package.json` runs client and server together with `concurrently` (`npm run dev`); each app keeps its own `node_modules` (no workspaces) |
-| Server dev tooling | ESM (`"type": "module"`), `tsx watch` in dev, `tsc` build to `dist/` |
+| Server dev tooling | ESM (`"type": "module"`), `tsc` build to `dist/`. Dev runs `node --watch --watch-preserve-output --import tsx src/server.ts` (was `tsx watch`, see "Server dev watcher") |
 | Phase 0 server files | The envelope helper, `AppError`, `not-found`, `error-handler` and `config/env.ts` are built to their final spec in phase 0 (needed for the 404 check); phase 3 adds the rest |
 | Dependencies | Installed per phase, only when first used |
 | Formatting / linting | Prettier with one shared config at the root for both apps (`npm run format`); the client keeps the linter Vite's template ships (oxlint, `npm run lint`) |
@@ -230,3 +230,5 @@ Don't start a phase until the previous one is done.
 | Phase 5 placeholders | Unbuilt pages show only their header; Home shows name, @username and the Lookbooks/Stats/Settings icon buttons; Settings has only Account → Log out; in the + sheet, Upload clothes is disabled until phase 6 |
 | App icon | A white hanger on plum, drawn as `icon.svg`; PNGs (192, 512, maskable 512) made from it once. Replaceable any time |
 | Phase 5 small defaults | React Router data router (`createBrowserRouter`); `@hookform/resolvers` 5 (6 has a broken peer-dependency tree); shadcn components restyled to the prototype (pill buttons, bottom sheet → centred card from 640 px); wrong login shown above the button; logout that fails keeps you logged in with a toast; service worker only in the built app; model caching added in phase 6 |
+| Server dev watcher | `tsx watch` froze the API on Windows when started by `concurrently` (`npm run dev`, `npm run phone`): concurrently gives each command a stdin pipe that stays open, `tsx watch` reads stdin (Enter = rerun), and that pending read stopped the server process before it could listen. Replaced by Node's built-in `--watch` (doesn't read stdin, restarts on any imported `.ts` change) with tsx as the loader |
+| Server ready line | On start the server prints `API ready on http://localhost:<PORT>/api/v1` (the only `console.log`), so a server that never starts is visible |

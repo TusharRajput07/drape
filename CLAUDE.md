@@ -53,7 +53,8 @@ Its background removal, weather, wishlist fetching and storage are fake.
 - **Duplicate outfits are impossible** (signature + deferred DB trigger). Outfit = 1 top, 1 bottom, 0–1 shoes, any accessories.
 - **UI:** white background, Inter, accent colour from settings (plum default). **No dates shown anywhere.**
   The outfit builder rows are a fixed 30 / 60 / 10.
-- **No logging libraries:** only `console.error` for unexpected errors and in catch blocks. No automated tests in v1.
+- **No logging libraries:** only `console.error` for unexpected errors and in catch blocks, plus the server's one
+  "API ready" line at start-up. No automated tests in v1.
 - **The repo is public:** never commit `.env` or secrets. Passwords and refresh tokens are stored hashed only.
 
 ## Layout

@@ -19,7 +19,7 @@ How the server is built and every endpoint it exposes. Read `01-database.md` fir
 | Images | Cloudinary Node SDK (signing, verifying, deleting) |
 | Weather | Open-Meteo forecast + geocoding APIs (free, no key) |
 | Security middleware | `helmet`, `cors` (credentials, single origin), `cookie-parser`, `express-rate-limit` (auth routes only) |
-| Logging | **None.** Only `console.error` for unexpected errors (section 9) |
+| Logging | **None.** Only `console.error` for unexpected errors (section 9), plus one "API ready" line at start-up |
 | Tests | None in v1 |
 
 ---
@@ -517,7 +517,8 @@ Abandoned uploads (signed and uploaded, but never saved) are cleaned up by a wee
   - `AppError` → its status/code/message
   - anything else → **`console.error(err)`** and 500 `INTERNAL_ERROR` with a generic message
 - `try/catch` blocks that swallow or translate an error (Cloudinary clean-up, page fetch, geocoding) also `console.error` what they caught.
-- No logging library, request logging or log files.
+- No logging library, request logging or log files. The one exception: `server.ts` prints `API ready on http://localhost:<PORT>/api/v1`
+  once it's listening.
 
 ---
 
