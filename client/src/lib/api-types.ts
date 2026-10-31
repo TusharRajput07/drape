@@ -74,3 +74,42 @@ export type Me = {
   };
   counts: { items: number; outfits: number; looks: number; liked: number; wishlist: number };
 };
+
+// Shapes from 02 §8.1.
+
+export type CategorySlug = 'top' | 'bottom' | 'shoes' | 'accessory';
+
+export type Category = { id: string; slug: CategorySlug; name: string };
+
+export type Subcategory = { id: string; categoryId: string; name: string; itemCount?: number };
+
+export type Color = { id: string; slug: string; name: string; hex: string; isNeutral?: boolean };
+
+export type Item = {
+  id: string;
+  category: Category;
+  subcategory: Subcategory;
+  color: Color;
+  image: Image;
+  isLiked: boolean;
+};
+
+export type ItemDetail = Item & { usage: { outfits: number; looks: number } };
+
+export type UploadKind = 'item' | 'look' | 'avatar' | 'cover';
+
+export type UploadSignature = {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+  publicId: string;
+  allowedFormats: string;
+  maxBytes: number;
+};
+
+// Only the parts of GET /stats the closet uses; the stats page (phase 9) adds the rest.
+export type Stats = {
+  composition: { total: number; byColor: { color: Color; count: number; percent: number }[] };
+};

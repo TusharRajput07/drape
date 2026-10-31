@@ -20,6 +20,12 @@ const EnvSchema = z.object({
   ACCESS_TOKEN_TTL: z.string().regex(/^\d+[smhd]$/, 'must look like 15m, 1h or 30s'),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive(),
   COOKIE_SAMESITE: z.enum(['lax', 'none']),
+  // Express 'trust proxy': a hop count ("1") or addresses/names ("loopback"). Loopback trusts only proxies on
+  // this machine (the dev tunnel and vite preview); production sets it when hosting is chosen.
+  TRUST_PROXY: z
+    .string()
+    .default('loopback')
+    .transform((v) => (/^\d+$/.test(v) ? Number(v) : v)),
 
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),

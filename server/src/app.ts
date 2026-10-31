@@ -9,6 +9,8 @@ import { apiRouter } from './routes/index.js';
 
 export const app = express();
 
+app.set('trust proxy', env.TRUST_PROXY); // so the rate limiter sees each client's real IP
+
 app.use(helmet());
 app.use(cors({ origin: env.CLIENT_URL, credentials: true }));
 app.use(express.json({ limit: '100kb' })); // images never go through the server

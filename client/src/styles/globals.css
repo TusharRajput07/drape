@@ -70,6 +70,25 @@
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
+/* The heart's little pop when liked */
+@keyframes pop {
+  40% {
+    transform: scale(1.3);
+  }
+}
+
+/* See-through areas in the upload preview */
+@utility checker {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #f0f0ed 25%, transparent 25%, transparent 75%, #f0f0ed 75%),
+    linear-gradient(45deg, #f0f0ed 25%, transparent 25%, transparent 75%, #f0f0ed 75%);
+  background-size: 20px 20px;
+  background-position:
+    0 0,
+    10px 10px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

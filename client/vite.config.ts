@@ -4,6 +4,14 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Cross-origin isolation (03 §12): lets background removal's CPU fallback use several threads.
+// credentialless keeps Cloudinary images, fonts and the model files loading without changes; browsers
+// that don't support it simply aren't isolated. Production hosting must send the same two headers.
+const isolation = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'credentialless',
+};
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // `npm run phone` builds with this mode: the app calls the API on its own address (/api, forwarded below),
@@ -14,7 +22,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
-      // Installable only (03 §10): app shell + fonts are cached; API answers and Cloudinary images never are.
+      // Installable only (03 §10): app shell, fonts and the background-removal files are cached;
+      // API answers and Cloudinary images never are.
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icons/icon.svg'],
@@ -40,6 +49,16 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,svg,png,webp,woff2}'],
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
+            // Background-removal model + WASM (version-pinned paths on img.ly's CDN): download once per device.
+            {
+              urlPattern: ({ url }) => url.origin === 'https://staticimgly.com',
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'background-removal',
+                expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
             {
               urlPattern: ({ url }) => url.origin === 'https://fonts.googleapis.com',
               handler: 'StaleWhileRevalidate',
@@ -69,10 +88,12 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       proxy: { '/api': 'http://localhost:4000' },
       allowedHosts: ['.trycloudflare.com'],
+      headers: isolation,
     },
     preview: {
       port: 4173,
       strictPort: true,
+      headers: isolation,
     },
   };
 });

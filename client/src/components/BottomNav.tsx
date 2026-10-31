@@ -42,15 +42,14 @@ function Tab({ to, label, icon: Icon }: (typeof TABS)[number]) {
   );
 }
 
-type Action = { icon: LucideIcon; title: string; text: string; onSelect?: () => void };
+type Action = { icon: LucideIcon; title: string; text: string; onSelect: () => void };
 
 function ActionRow({ icon: Icon, title, text, onSelect }: Action) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      disabled={!onSelect}
-      className="flex items-center gap-3.5 rounded-2xl border border-border p-3.5 text-left hover:border-foreground disabled:opacity-50 disabled:hover:border-border"
+      className="flex items-center gap-3.5 rounded-2xl border border-border p-3.5 text-left hover:border-foreground"
     >
       <span className="grid size-11 flex-none place-items-center rounded-full bg-soft">
         <Icon className="size-[22px]" strokeWidth={1.8} aria-hidden />
@@ -64,7 +63,7 @@ function ActionRow({ icon: Icon, title, text, onSelect }: Action) {
 }
 
 // Fixed bottom nav with the raised "+" that opens the Add sheet (03 §3).
-export function BottomNav() {
+export function BottomNav({ onUpload }: { onUpload: () => void }) {
   const [adding, setAdding] = useState(false);
   const navigate = useNavigate();
   const go = (to: string) => () => {
@@ -72,12 +71,15 @@ export function BottomNav() {
     navigate(to);
   };
 
-  // Upload clothes arrives in phase 6.
   const actions: Action[] = [
     {
       icon: Camera,
       title: 'Upload clothes',
       text: 'Add a photo from your gallery. The background is removed for you.',
+      onSelect: () => {
+        setAdding(false);
+        onUpload();
+      },
     },
     {
       icon: HangerIcon,

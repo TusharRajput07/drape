@@ -142,7 +142,7 @@ Don't start a phase until the previous one is done.
 ### Phase 6 — Closet and upload
 - Profile header, category tabs, infinite grid, filter sheet, item detail sheet.
 - Upload flow: photo tip, EXIF orientation + rotate button (before removal), background removal (lazy-loaded, first-use progress, WebGPU with CPU fallback), transparency check, subcategory picker with "+ New", colour detection, compression, direct Cloudinary upload, save.
-- Decide HTTPS + cross-origin isolation for background removal first (open item in §7 and 03 §12).
+- Decide HTTPS + cross-origin isolation for background removal first (decided: see "Cross-origin isolation" in §8 and 03 §12).
 
 **Done when:** an item can be uploaded with and without background removal, appears on the right tab, and can be liked, re-categorised, filtered and deleted (or blocked when used).
 
@@ -165,6 +165,7 @@ Don't start a phase until the previous one is done.
 ### Phase 10 — Polish and launch
 - Empty states, loading skeletons, error toasts per 03 §11, reduced motion, accessibility labels.
 - Decide hosting (must not sleep for long), set the cookie `SameSite` and CORS for production, schedule the two cleanup jobs.
+- On the host: send the two cross-origin isolation headers with the app (03 §12) and set `TRUST_PROXY` for its proxy (02 §10).
 
 **Done when:** the owner uses it on their phone for a week without blockers.
 
@@ -193,8 +194,7 @@ Don't start a phase until the previous one is done.
 
 | Item | Owner | Needed by |
 |---|---|---|
-| 5 category tab photos (all, top, bottom, shoes, accessory) | Owner | Phase 6 |
-| HTTPS + cross-origin isolation (COOP/COEP) for background removal, incl. the effect on Cloudinary and wishlist images (03 §12) | Owner + Claude | Phase 6 / hosting |
+| 5 category tab photos (all, top, bottom, shoes, accessory); line icons stand in until then (03 §6.2) | Owner | Any time (no code change) |
 | Hosting choice | Owner + Claude | Phase 10 |
 | Cloudinary Admin API limit (500 calls/hour, used by upload verification; 02 §12) | Owner + Claude | Before more users |
 
@@ -206,11 +206,11 @@ Don't start a phase until the previous one is done.
 |---|---|
 | Node version | Node 24 LTS (was 22) for both apps; `engines` set in each `package.json` |
 | Dev command | Root `package.json` runs client and server together with `concurrently` (`npm run dev`); each app keeps its own `node_modules` (no workspaces) |
-| Server dev tooling | ESM (`"type": "module"`), `tsc` build to `dist/`. Dev runs `node --watch --watch-preserve-output --import tsx src/server.ts` (was `tsx watch`, see "Server dev watcher") |
+| Server dev tooling | ESM (`"type": "module"`), `tsc` build to `dist/`. Dev runs `node --watch-path=src --watch-preserve-output --import tsx src/server.ts` (was `tsx watch`, see "Server dev watcher") |
 | Phase 0 server files | The envelope helper, `AppError`, `not-found`, `error-handler` and `config/env.ts` are built to their final spec in phase 0 (needed for the 404 check); phase 3 adds the rest |
 | Dependencies | Installed per phase, only when first used |
 | Formatting / linting | Prettier with one shared config at the root for both apps (`npm run format`); the client keeps the linter Vite's template ships (oxlint, `npm run lint`) |
-| Background removal | `@imgly/background-removal`, **default model** (`isnet_fp16`); the small model wasn't good enough. Runs on WebGPU (`device: 'gpu'`) with automatic fallback to the multi-threaded CPU. Measured per photo: laptop GPU ~2.4 s, laptop CPU ~8 s, phone GPU 2–4 s, phone CPU ~15 s; first photo slower; model downloads once. Needs HTTPS + cross-origin isolation (open item). Details in 03 §9.1 |
+| Background removal | `@imgly/background-removal`, **default model** (`isnet_fp16`); the small model wasn't good enough. Runs on WebGPU (`device: 'gpu'`) with automatic fallback to the multi-threaded CPU. Measured per photo: laptop GPU ~2.4 s, laptop CPU ~8 s, phone GPU 2–4 s, phone CPU ~15 s; first photo slower; model downloads once. Needs HTTPS + cross-origin isolation (see "Cross-origin isolation"). Details in 03 §9.1 |
 | Upload photo handling | Tip "For the best cutout, lay it flat on a plain floor or sheet." above the photo button; EXIF orientation applied automatically; a rotate button (90° clockwise per tap) applied before background removal and colour detection (03 §6.4) |
 | Prisma | Prisma 7 (7.10.1, the latest stable; 8 was only a release candidate), `@prisma/adapter-pg`, `prisma.config.ts`, generated client not committed |
 | Database checks | Phase 2's SQL checks live in `server/prisma/checks/` and run by hand with `npm run db:check` (psql); every check rolls back or fails its own COMMIT, so no data is left. Not an automated test |
@@ -229,6 +229,11 @@ Don't start a phase until the previous one is done.
 | Phone testing | `npm run phone`: built app on `vite preview` (forwards `/api` to the server) behind a Cloudflare quick tunnel for trusted HTTPS; `cloudflared` installed once on the laptop, not in the repo (03 §10.1) |
 | Phase 5 placeholders | Unbuilt pages show only their header; Home shows name, @username and the Lookbooks/Stats/Settings icon buttons; Settings has only Account → Log out; in the + sheet, Upload clothes is disabled until phase 6 |
 | App icon | A white hanger on plum, drawn as `icon.svg`; PNGs (192, 512, maskable 512) made from it once. Replaceable any time |
-| Phase 5 small defaults | React Router data router (`createBrowserRouter`); `@hookform/resolvers` 5 (6 has a broken peer-dependency tree); shadcn components restyled to the prototype (pill buttons, bottom sheet → centred card from 640 px); wrong login shown above the button; logout that fails keeps you logged in with a toast; service worker only in the built app; model caching added in phase 6 |
-| Server dev watcher | `tsx watch` froze the API on Windows when started by `concurrently` (`npm run dev`, `npm run phone`): concurrently gives each command a stdin pipe that stays open, `tsx watch` reads stdin (Enter = rerun), and that pending read stopped the server process before it could listen. Replaced by Node's built-in `--watch` (doesn't read stdin, restarts on any imported `.ts` change) with tsx as the loader |
+| Phase 5 small defaults | React Router data router (`createBrowserRouter`); `@hookform/resolvers` 5 (6 has a broken peer-dependency tree); shadcn components restyled to the prototype (pill buttons, bottom sheet → centred card from 640 px); wrong login shown above the button; logout that fails keeps you logged in with a toast; service worker only in the built app; model caching added in phase 6 (done, see "Background removal files") |
+| Server dev watcher | `tsx watch` froze the API on Windows when started by `concurrently` (`npm run dev`, `npm run phone`): concurrently gives each command a stdin pipe that stays open, `tsx watch` reads stdin (Enter = rerun), and that pending read stopped the server process before it could listen. Replaced by Node's built-in watch mode (doesn't read stdin) with tsx as the loader. It watches only `server/src` (`--watch-path=src`): plain `--watch` follows every imported file, packages in `node_modules` included, and restarted on its own |
 | Server ready line | On start the server prints `API ready on http://localhost:<PORT>/api/v1` (the only `console.log`), so a server that never starts is visible |
+| Trust proxy | Express `trust proxy` comes from the optional `TRUST_PROXY` env var, default `loopback`: behind the dev tunnel only proxies on the laptop (cloudflared, `vite preview`) are trusted and the client IP comes from Cloudflare's `X-Forwarded-For`, so the auth rate limit counts each phone separately. Production sets it (usually a hop count like `1`) with hosting. Never `true` (anyone could fake their IP) (02 §10) |
+| Cross-origin isolation | The whole app is isolated: `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless`, sent by Vite's dev and preview servers now and by the host later. With `credentialless`, Cloudinary images (every photo, wishlist ones included), Google Fonts and the model files load unchanged. Browsers without `credentialless` (Safari) just aren't isolated: everything works, the CPU fallback is single-threaded there (03 §12) |
+| Background removal files | Model + WASM come from img.ly's CDN (`staticimgly.com`, path pinned to the package version); the service worker caches them cache-first for a year, so each device downloads once. Nothing big in the repo |
+| Category tab photos | Until the owner's 5 photos are in `client/public/categories/`, each tab shows a line icon in its circle; dropping in `all/top/bottom/shoes/accessory.webp` replaces them with no code change |
+| Phase 6 small defaults | No "removal strength" slider (prototype only); the cutout is trimmed to the garment with a small margin; a failed removal shows a toast and turns the switch off so the photo can be saved as is; removals run one at a time; photos are worked on at 1200 px; the upload flow has a separate photo step (tip + "Choose a photo"); delete confirm and "in use" message are boxes inside the item sheet, as in the prototype; the filter sheet offers only colours (from `GET /stats`) and subcategories that tab has; after saving, Home opens on that tab with filters cleared; Home shows a simple skeleton while loading and a "Try again" box if the list fails |

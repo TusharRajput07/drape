@@ -7,7 +7,12 @@ import { ApiError, type Failure, type Success } from './api-types';
 
 const baseURL = import.meta.env.VITE_API_URL;
 
-export const api = axios.create({ baseURL, withCredentials: true });
+// Arrays go out as repeated keys (`?colorId=a&colorId=b`), the form the server reads (02 §8.6).
+export const api = axios.create({
+  baseURL,
+  withCredentials: true,
+  paramsSerializer: { indexes: null },
+});
 
 type RetryConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 

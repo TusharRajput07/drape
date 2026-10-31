@@ -232,6 +232,8 @@ Every response, success or error, uses this envelope.
   automatically. Unknown `/api/v1` paths therefore answer 401 without a token and 404 with one.
 - `express-rate-limit` on `/auth/signup` and `/auth/login`: 10 **failed** requests per 15 minutes per IP (successful ones
   don't count, `skipSuccessfulRequests`), with a separate counter for each route.
+  The IP is Express's `req.ip`, so `app.set('trust proxy', TRUST_PROXY)` (§10) decides which proxies' `X-Forwarded-For`
+  is believed: `loopback` by default (the dev tunnel), the host's hop count in production.
 - Login: a wrong email still runs one bcrypt comparison (against a dummy hash), so the response time doesn't reveal
   whether an email has an account.
 - Input rules: email and username are trimmed and lowercased before validation; password 8–72 characters **and**
@@ -536,6 +538,7 @@ JWT_ACCESS_SECRET=change-me-64-random-chars
 ACCESS_TOKEN_TTL=15m
 REFRESH_TOKEN_TTL_DAYS=30
 COOKIE_SAMESITE=lax        # lax | none (none when client and server are on different domains)
+TRUST_PROXY=loopback       # optional, default loopback; a hop count like 1 behind the host's proxy (set with hosting)
 
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=

@@ -33,7 +33,7 @@ The approved prototype is the visual reference for every screen: `prototype/inde
 client/
 ├── public/
 │   ├── categories/               fixed tab images: all.webp, top.webp, bottom.webp, shoes.webp, accessory.webp
-│   │                             (real product photos supplied by the owner)
+│   │                             (real product photos supplied by the owner; line icons until then)
 │   └── icons/                    PWA icons: icon.svg (also the favicon), icon-192/512.png, maskable-512.png
 ├── src/
 │   ├── main.tsx                  React root, QueryClientProvider, RouterProvider, Toaster
@@ -52,6 +52,7 @@ client/
 │   │   ├── image.ts              resize/compress to WebP, transparency check
 │   │   ├── color-detect.ts       nearest-palette colour detection (ported from the prototype)
 │   │   ├── accent.ts             accent colour table (§7) + applyAccent()
+│   │   ├── categories.ts         the 4 category slugs in tab order + labels (Tops / Top…)
 │   │   ├── use-online.ts         online/offline hook (offline screen, session check)
 │   │   └── utils.ts              cn() etc. (shadcn)
 │   ├── components/
@@ -62,6 +63,8 @@ client/
 │   │   ├── FullScreenLoader.tsx  shown while the session check runs
 │   │   ├── OfflineScreen.tsx     "You're offline" (§10)
 │   │   ├── HangerIcon.tsx        the prototype's hanger (lucide has none)
+│   │   ├── CategoryImage.tsx     tab photo in a circle (line icon until the photo exists)
+│   │   ├── Chip.tsx, ColorGrid.tsx, SwitchRow.tsx   the prototype's chips, colour swatches and switch row
 │   │   ├── ItemCard.tsx          photo + heart
 │   │   ├── ItemGrid.tsx          infinite-scroll grid
 │   │   ├── OutfitFigure.tsx      stacked top/bottom/shoes + accessory circles
@@ -71,8 +74,8 @@ client/
 │   ├── features/
 │   │   ├── auth/                 LoginPage, SignupPage, auth.api.ts, auth.store.ts, schemas.ts
 │   │   ├── profile/              ProfileHeader (cover card, avatar, icons, stats), me.api.ts
-│   │   ├── closet/               ClosetPage (Home), CategoryTabs, FilterSheet, ItemDetailSheet, items.api.ts, filters.store.ts
-│   │   ├── upload/               UploadFlow (category → photo → preview → save), useBackgroundRemoval.ts
+│   │   ├── closet/               ClosetPage (Home), CategoryTabs, FilterSheet, ItemDetailSheet, items.api.ts, lookups.api.ts, filters.store.ts
+│   │   ├── upload/               UploadFlow (category → photo → preview → save), useBackgroundRemoval.ts, upload.store.ts
 │   │   ├── subcategories/        SubcategoryPicker, ManageSubcategories, subcategories.api.ts
 │   │   ├── outfits/              OutfitsPage, OutfitDetailSheet, outfits.api.ts
 │   │   ├── builder/              BuilderPage, BuilderRow, AccessoriesSheet, builder.store.ts
@@ -195,18 +198,21 @@ The prototype is the visual reference. These are the rules to keep.
   - Name, @username, and 5 tappable counts: items, outfits, looks, liked, wishlist.
   - No edit button. Profile editing is in Settings.
 - **Category tabs:** circles with **fixed images** from `public/categories/` and labels: All, Tops, Bottoms, Shoes, Accessories. The row has side padding so the active ring isn't clipped.
+  Until the owner's photos are there, each circle shows a line icon (`CategoryImage` falls back when the image is missing). Changing tab clears the subcategory filter.
 - **Grid:** cards show **photo + heart only**. Infinite scroll. Tap → ItemDetailSheet.
-- **Filter button** next to the count ("23 items · Filter (2)"). Filter sheet: subcategory, colour, liked only, not in any outfit, sort newest/oldest.
+- **Filter button** next to the count ("23 items · Filter (2)"; "5 of 23 items" while filtering). Filter sheet: subcategory, colour, liked only, not in any outfit, sort newest/oldest.
+  Filters apply as they're tapped; it offers only the colours (from `GET /stats?category=`) and subcategories (`itemCount > 0`) the tab has; "Show N items" closes it.
 - **No dates anywhere.**
 
 ### 6.3 Item detail sheet
 - Shows the photo, subcategory (title), colour, and "in N outfits / M looks".
 - Change subcategory (same category only, "+ New" inline) and colour.
 - Like / Delete. Delete when used → `ITEM_IN_USE` message with counts and a button to Outfits or Lookbooks. Otherwise a confirm dialog.
+  Both are boxes inside the sheet, as in the prototype ("This top is in 1 outfit. Remove it from there first, then delete it." / "Delete this top? This can't be undone.").
 
 ### 6.4 Upload flow (the + sheet → Upload clothes)
 1. Pick a category (4 options with the fixed images).
-2. Pick a photo (`<input type="file" accept="image/*">`). HEIC or other undecodable formats → "Try a JPG or PNG".
+2. Pick a photo (`<input type="file" accept="image/*">`) from a photo step with a "Choose a photo" button. HEIC or other undecodable formats → "Couldn't open that photo … Try a JPG or PNG".
    - A one-line tip above the photo button, in small grey (`--muted`) text: "For the best cutout, lay it flat on a plain floor or sheet."
    - The photo is decoded with the phone's built-in orientation (EXIF) applied automatically, so it never shows up sideways.
 3. **Preview:**
@@ -215,7 +221,10 @@ The prototype is the visual reference. These are the rules to keep.
      background removal and colour detection (both re-run after a rotate), so the saved cutout is upright.
    - Checkered preview background.
    - **Subcategory picker (required)** with "+ New"; Save stays disabled until one is picked.
-   - Detected **colour chip** ("Navy · detected · Change").
+   - Detected **colour chip** ("Navy · detected · Change"; "chosen by you" after a manual pick).
+   - The photo is worked on at 1200 px (the saved size). The cutout is trimmed to the garment with a small margin.
+     If removal fails, a toast says so and the switch turns off, so the photo can still be saved as is.
+     The prototype's "removal strength" slider is not used (the AI model doesn't need it).
 4. Save:
    1. Compress to WebP (max 1200 px long side, quality 0.85; PNG fallback if WebP is unsupported).
    2. `POST /uploads/signature {kind:'item'}`.
@@ -325,7 +334,8 @@ The prototype is the visual reference. These are the rules to keep.
 - `@imgly/background-removal` is **lazy-loaded** with a dynamic `import()` only when the upload preview opens, so it never slows the rest of the app.
 - **Model:** the library's **default model** (`isnet_fp16`), chosen in §9.1.
 - **First use on a device:** the model downloads once (~88 MB, plus ~12–23 MB of runtime WASM). Show "Getting the background remover ready…" with a progress bar from the library's progress callback.
-  The PWA service worker caches the model files, so later uploads skip this.
+  The files come from img.ly's CDN (`staticimgly.com`, the path is pinned to the package version); the PWA service worker caches them, so later uploads skip the download.
+- One photo at a time: removals wait in line, and asking twice for the same photo reuses the first result (React runs effects twice in development).
 - **Runs on the phone in the browser** with `device: 'gpu'` (WebGPU). The library falls back to the CPU (WASM, multi-threaded when the page is cross-origin isolated) automatically when WebGPU isn't available.
   Typical time is 2–4 s on a phone GPU, ~15 s on a phone CPU (§9.1); show a spinner. The model is loaded once per session and reused for every photo.
 - **Transparency check** (`lib/image.ts`): if more than 1% of sampled pixels are already see-through, the switch starts **off** with the note "Your photo already has a see-through background."
@@ -359,7 +369,7 @@ comparing the default model (`isnet_fp16`, ~88 MB) with the small one (`isnet_qu
 - The **model downloads once** per device (then cached); loading it into memory takes ~6–10 s once per session.
 - Without cross-origin isolation the CPU runs on **one thread**: ~25 s per photo, even on the laptop.
 
-**Requirements this creates** (see the open item in §12):
+**Requirements this creates** (decided in §12):
 - **WebGPU** needs a secure context (HTTPS; `localhost` is fine in development).
 - **The multi-threaded CPU fallback** also needs cross-origin isolation:
   `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy`.
@@ -374,11 +384,10 @@ comparing the default model (`isnet_fp16`, ~88 MB) with the small one (`isnet_qu
   - `name` / `short_name`: **Drape**.
   - `display: standalone`, `start_url: /`, `background_color: #FFFFFF`, `theme_color`: plum `#6A4566`.
   - Icons 192, 512 and maskable 512.
-- **Service worker caches:** the app shell (JS/CSS/fonts/HTML), the category images, and the background-removal model/WASM files (cache-first, long expiry).
+- **Service worker caches:** the app shell (JS/CSS/fonts/HTML), the category images, and the background-removal model/WASM files (`staticimgly.com`, cache-first, 1 year).
 - **Not cached:** API responses and Cloudinary images. The app needs internet for data (offline browsing is out of scope).
 - If the app is opened offline: a simple "You're offline" screen. It also covers the app whenever the phone goes offline, and goes away when it's back.
 - The service worker only runs in the built app (`npm run phone`), not in `npm run dev`.
-- The model/WASM caching rule is added in phase 6 together with `@imgly/background-removal`.
 
 ### 10.1 Trying it on a phone (development)
 
@@ -413,5 +422,5 @@ Copy rules: short, plain, active voice; errors say what to do next; no dates; no
 | Topic | Note |
 |---|---|
 | Category tab photos | Owner supplies 5 real photos (all, top, bottom, shoes, accessory) |
-| HTTPS + cross-origin isolation | **Open, decide in phase 6 / with hosting.** Background removal needs HTTPS (WebGPU) and COOP/COEP headers (multi-threaded CPU fallback), §9.1. Decide: isolate the whole app or not; `require-corp` vs `credentialless`; how Cloudinary images (items, looks, avatar, cover, wishlist photos) and other cross-origin files (fonts, model files) still load under COEP (CORS / `crossorigin` attribute or CORP headers). (HTTPS for phone testing in development is decided: the Cloudflare tunnel, §10.1.) Without isolation, WebGPU still works but the CPU fallback is single-threaded (~25 s+) |
+| HTTPS + cross-origin isolation | **Decided in phase 6.** The whole app is isolated with `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless` (set in `vite.config.ts` for the dev and preview servers; the host must send the same two headers, phase 10). With `credentialless` the cross-origin files load unchanged: Cloudinary images (items, looks, avatar, cover, wishlist photos; Cloudinary also sends CORS headers), Google Fonts and the model files (img.ly's CDN sends CORS + CORP headers). Browsers without `credentialless` support (Safari) simply aren't isolated: nothing breaks, the CPU fallback is single-threaded there. HTTPS for phone testing: the Cloudflare tunnel (§10.1) |
 | Hosting | Decided later. Affects `VITE_API_URL` and the cookie `SameSite` setting |
