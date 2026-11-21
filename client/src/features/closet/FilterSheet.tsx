@@ -1,5 +1,6 @@
 import { Chip } from '@/components/Chip';
 import { ColorGrid } from '@/components/ColorGrid';
+import { Segmented } from '@/components/Segmented';
 import { SwitchRow } from '@/components/SwitchRow';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
@@ -68,7 +69,8 @@ export function FilterSheet({ open, onOpenChange, shown }: Props) {
 
         <div className="mt-3.5 grid justify-items-start gap-1.5">
           <span className={label}>Sort</span>
-          <Segmented
+          <Segmented<Sort>
+            label="Sort"
             value={f.sort}
             onChange={f.setSort}
             options={[
@@ -88,35 +90,5 @@ export function FilterSheet({ open, onOpenChange, shown }: Props) {
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function Segmented({
-  value,
-  onChange,
-  options,
-}: {
-  value: Sort;
-  onChange: (v: Sort) => void;
-  options: { value: Sort; label: string }[];
-}) {
-  return (
-    <div role="group" aria-label="Sort" className="inline-flex rounded-full bg-soft p-[3px]">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          aria-pressed={value === o.value}
-          onClick={() => onChange(o.value)}
-          className={cn(
-            'h-[34px] rounded-full px-3.5 text-[13px] text-muted',
-            value === o.value &&
-              'bg-background font-medium text-foreground shadow-[0_0_0_1px_var(--border)]',
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
   );
 }

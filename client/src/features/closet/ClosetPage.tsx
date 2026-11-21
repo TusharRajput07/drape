@@ -1,7 +1,7 @@
 import { Camera, SlidersHorizontal } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
-import { ItemGrid } from '@/components/ItemGrid';
+import { ItemGrid, ItemGridSkeleton } from '@/components/ItemGrid';
 import { Button } from '@/components/ui/button';
 import { ProfileHeader } from '@/features/profile/ProfileHeader';
 import { startUpload } from '@/features/upload/upload.store';
@@ -82,7 +82,7 @@ export function ClosetPage() {
         </div>
 
         {list.isPending ? (
-          <GridSkeleton />
+          <ItemGridSkeleton />
         ) : list.isError ? (
           <EmptyState
             title="Couldn't load your clothes"
@@ -128,15 +128,5 @@ export function ClosetPage() {
       <FilterSheet open={filterOpen} onOpenChange={setFilterOpen} shown={shown} />
       <ItemDetailSheet item={open} onClose={() => setOpen(null)} />
     </>
-  );
-}
-
-function GridSkeleton() {
-  return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(176px,1fr))] md:gap-4">
-      {Array.from({ length: 4 }, (_, i) => (
-        <div key={i} className="aspect-[4/5] animate-pulse rounded-2xl bg-soft" />
-      ))}
-    </div>
   );
 }

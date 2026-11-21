@@ -34,6 +34,24 @@ export function useItems(filters: ItemFilters) {
   });
 }
 
+// Every matching item at once, page by page (the builder rows and accessories; a closet is small, 03 §6.6).
+// Its own key under ['items'], so item changes refresh it too.
+export function useAllItems(filters: ItemFilters) {
+  return useQuery({
+    queryKey: ['items', 'all', filters],
+    queryFn: async () => {
+      const all: Item[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await fetchItems({ ...filters, cursor, limit: 60 });
+        all.push(...page.data);
+        cursor = page.meta?.hasMore ? (page.meta.nextCursor ?? undefined) : undefined;
+      } while (cursor);
+      return all;
+    },
+  });
+}
+
 // How many items a tab has before filters ("5 of 23 items").
 export function useItemTotal(category?: CategorySlug) {
   return useQuery({
@@ -50,9 +68,18 @@ export function useItem(id: string | null) {
   });
 }
 
-// After any change: lists, counts in the profile header, stats and subcategory item counts (03 §4.1).
+// After any change: lists, counts in the profile header, stats, subcategory item counts (03 §4.1),
+// and the outfits that show the item's subcategory.
 function refreshWardrobe(queryClient: QueryClient) {
-  for (const queryKey of [['items'], ['item'], ['me'], ['stats'], ['subcategories']]) {
+  for (const queryKey of [
+    ['items'],
+    ['item'],
+    ['me'],
+    ['stats'],
+    ['subcategories'],
+    ['outfits'],
+    ['outfit'],
+  ]) {
     void queryClient.invalidateQueries({ queryKey });
   }
 }

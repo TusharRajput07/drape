@@ -68,8 +68,10 @@ client/
 │   │   ├── ItemCard.tsx          photo + heart
 │   │   ├── ItemGrid.tsx          infinite-scroll grid
 │   │   ├── OutfitFigure.tsx      stacked top/bottom/shoes + accessory circles
+│   │   ├── OutfitGrid.tsx        infinite-scroll grid of outfit cards (figure + heart)
+│   │   ├── Segmented.tsx         the prototype's pill switch (sort, Clothes | Outfits)
 │   │   ├── EmptyState.tsx
-│   │   ├── ConfirmDialog.tsx
+│   │   ├── ConfirmBox.tsx        confirm / "can't do that" box inside a sheet
 │   │   └── InfiniteSentinel.tsx  loads the next page when scrolled into view
 │   ├── features/
 │   │   ├── auth/                 LoginPage, SignupPage, auth.api.ts, auth.store.ts, schemas.ts
@@ -97,7 +99,7 @@ client/
 
 Rules:
 - A feature folder owns its pages, components, `*.api.ts` (query/mutation hooks) and stores.
-- Features may import from `components/`, `lib/` and other features' **api hooks**, never another feature's internals.
+- Features may import from `components/`, `lib/` and other features' **api hooks**, never another feature's internals. The one exception is the two detail sheets other pages open: `closet/ItemDetailSheet` and `outfits/OutfitDetailSheet`.
 - All server calls go through `lib/api.ts`. Components never call Axios directly; they use the feature's hooks.
 
 ---
@@ -157,7 +159,7 @@ Query keys:
 |---|---|---|
 | `auth.store` | `accessToken`, `status: 'unknown' \| 'authed' \| 'guest'` | **No.** Memory only (the refresh cookie restores it) |
 | `filters.store` | closet tab, subcategory/colour filters, liked, unused, sort | No |
-| `builder.store` | current index per row, locks, subcategory per row, edit target, picked accessories | No |
+| `builder.store` | current pick per row (item id; `null` = no shoes), locks, subcategory per row, edit target, picked accessories | No |
 
 ---
 
@@ -236,7 +238,8 @@ The prototype is the visual reference. These are the rules to keep.
 - `PageHeader`: "My outfits" left, **Create outfit** button right; the count below.
 - **WeatherCard** under the header: icon, temperature, condition, place, what-to-wear message.
 - Grid of **OutfitFigure** cards: stacked top → bottom → shoes, the top **slightly** overlapping the bottom, accessories as small circles on the right, **heart top-left**. No name, no date.
-- **OutfitDetailSheet:** the figure, the list of pieces, and three equal buttons in one row: **Favourite · Edit · Delete** (Delete = red text, with a confirm dialog).
+- **OutfitDetailSheet:** the figure, the list of pieces (thumbnail, subcategory, category), and three equal buttons in one row: **Favourite · Edit · Delete** (Delete = red text, with a confirm box inside the sheet: "Delete this outfit? Your clothes stay in your closet.").
+- Up to 4 accessory circles on a card, then a "+N" circle. The count line ("3 saved outfits. Pick one for today.") is hidden when there are none.
 
 ### 6.6 Outfit builder (`/outfits/new`, `/outfits/:id/edit`)
 - Full screen, no bottom nav. Header: back, title ("Create outfit" / "Edit outfit"), **Shuffle**.
@@ -244,18 +247,21 @@ The prototype is the visual reference. These are the rules to keep.
 - Each row:
   - Horizontal scroll-snap carousel; the centred item is selected and the neighbours are dimmed.
   - Row label is a **subcategory dropdown** ("All tops", "Shirts"…).
-  - Lock button: a locked row keeps its item on shuffle.
+  - Lock button: a locked row keeps its item on shuffle (shown when the row has more than one slide).
+  - The shoes row starts with a **"No shoes"** slide (an outfit may have none). New outfits start on the first pair; Shuffle only picks real shoes.
+  - The dropdown lists only subcategories with items; changing it keeps the pick if it's still shown, otherwise the row moves to its first item.
 - Rows use `GET /items?category=…&subcategoryId=…`. Load all pages up front (a closet is small); show a skeleton while loading.
 - **Save:**
   1. Opens **AccessoriesSheet** (multi-select, can skip).
   2. `POST /outfits` (or `PUT` when editing).
-  3. `OUTFIT_DUPLICATE` → inline message in the sheet; picks are kept.
+  3. `OUTFIT_DUPLICATE` → inline message in the sheet ("You already saved this outfit. Change the accessories, or go back and change a piece."); picks are kept. At most 10 accessories.
   4. Success → `/outfits`, toast "Outfit saved" / "Outfit updated".
 - Edit mode pre-selects the outfit's pieces and accessories.
 - Save is disabled if the Tops or Bottoms row is empty.
 
 ### 6.7 Liked
-- A two-way switch: **Clothes** (liked items grid) | **Outfits** (favourite outfits grid).
+- A two-way switch: **Clothes** (liked items grid) | **Outfits** (favourite outfits grid), with counts ("Clothes · 4").
+- Cards open the same ItemDetailSheet / OutfitDetailSheet as Home and Outfits. Hearts change at once; an unliked card leaves when the list refreshes.
 
 ### 6.8 Wishlist
 - `PageHeader` "Wishlist".

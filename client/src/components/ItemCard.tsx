@@ -26,21 +26,24 @@ export function ItemCard({ item, onOpen, onLike }: Props) {
   );
 }
 
+// Outfits pass their own labels (favourites rather than liked).
 export function HeartButton({
   liked,
   onClick,
   className,
+  labels = ['Remove from liked', 'Add to liked'],
 }: {
   liked: boolean;
   onClick: () => void;
   className?: string;
+  labels?: [on: string, off: string];
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={liked}
-      aria-label={liked ? 'Remove from liked' : 'Add to liked'}
+      aria-label={liked ? labels[0] : labels[1]}
       className={cn(
         'grid size-9 place-items-center rounded-full bg-background/90',
         liked ? 'text-accent' : 'text-foreground',

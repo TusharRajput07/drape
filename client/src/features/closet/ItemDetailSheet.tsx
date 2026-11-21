@@ -1,8 +1,9 @@
 import { Heart, Trash2 } from 'lucide-react';
-import { type ReactNode, useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { ColorDot, ColorGrid } from '@/components/ColorGrid';
+import { ConfirmBox } from '@/components/ConfirmBox';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { SubcategoryPicker } from '@/features/subcategories/SubcategoryPicker';
@@ -228,14 +229,5 @@ function LinkButton(props: { onClick: () => void; children: string }) {
       className="ml-1 text-[13px] font-medium text-accent underline underline-offset-2"
       {...props}
     />
-  );
-}
-
-function ConfirmBox({ text, children }: { text: string; children: ReactNode }) {
-  return (
-    <div className="mt-4 rounded-[14px] bg-soft p-3.5">
-      <p className="mb-2.5">{text}</p>
-      <div className="flex gap-2">{children}</div>
-    </div>
   );
 }

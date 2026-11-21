@@ -15,7 +15,7 @@ type Props = {
 export function ItemGrid({ items, hasMore, loadingMore, onMore, onOpen, onLike }: Props) {
   return (
     <>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(176px,1fr))] md:gap-4">
+      <div className={ITEM_GRID}>
         {items.map((item) => (
           <ItemCard
             key={item.id}
@@ -27,5 +27,18 @@ export function ItemGrid({ items, hasMore, loadingMore, onMore, onOpen, onLike }
       </div>
       <InfiniteSentinel hasMore={hasMore} loading={loadingMore} onMore={onMore} />
     </>
+  );
+}
+
+const ITEM_GRID =
+  'grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(176px,1fr))] md:gap-4';
+
+export function ItemGridSkeleton() {
+  return (
+    <div className={ITEM_GRID}>
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="aspect-[4/5] animate-pulse rounded-2xl bg-soft" />
+      ))}
+    </div>
   );
 }

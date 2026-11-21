@@ -96,6 +96,15 @@ export type Item = {
 
 export type ItemDetail = Item & { usage: { outfits: number; looks: number } };
 
+export type Outfit = {
+  id: string;
+  isFavourite: boolean;
+  top: Item;
+  bottom: Item;
+  shoes: Item | null;
+  accessories: Item[];
+};
+
 export type UploadKind = 'item' | 'look' | 'avatar' | 'cover';
 
 export type UploadSignature = {
