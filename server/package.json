@@ -17,7 +17,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset",
-    "db:check": "tsx prisma/checks/run.ts"
+    "db:check": "tsx prisma/checks/run.ts",
+    "job:tokens": "tsx src/jobs/run.ts tokens",
+    "job:uploads": "tsx src/jobs/run.ts uploads"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

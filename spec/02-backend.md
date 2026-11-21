@@ -18,7 +18,7 @@ How the server is built and every endpoint it exposes. Read `01-database.md` fir
 | Passwords | `bcryptjs`, cost 12 |
 | Images | Cloudinary Node SDK (signing, verifying, deleting) |
 | Weather | Open-Meteo forecast + geocoding APIs (free, no key) |
-| Security middleware | `helmet`, `cors` (credentials, single origin), `cookie-parser`, `express-rate-limit` (auth routes only) |
+| Security middleware | `helmet` (incl. cross-origin isolation + CSP, §13), `cors` on `/api` (credentials, single origin), `cookie-parser`, `express-rate-limit` (auth routes only) |
 | Logging | **None.** Only `console.error` for unexpected errors (section 9), plus one "API ready" line at start-up |
 | Tests | None in v1 |
 
@@ -47,8 +47,11 @@ server/
 │   └── checks/                    manual SQL checks for 01's rules (npm run db:check, needs psql)
 ├── src/
 │   ├── generated/prisma/          generated Prisma client (not committed; prisma generate on install)
-│   ├── server.ts                  starts the HTTP server
-│   ├── app.ts                     builds the Express app (middleware + routes)
+│   ├── server.ts                  starts the HTTP server (+ the clean-up jobs in production)
+│   ├── app.ts                     builds the Express app (middleware + routes; serves client/dist in production, §13)
+│   ├── jobs/
+│   │   ├── cleanup.ts             the two clean-up jobs and their in-process schedule (§11)
+│   │   └── run.ts                 runs one job by hand (npm run job:tokens | job:uploads)
 │   ├── config/
 │   │   ├── env.ts                 Zod-validated process.env (fails fast on startup)
 │   │   └── cloudinary.ts          configured Cloudinary client
@@ -127,7 +130,7 @@ Layer rules:
 | Dates | Not returned unless a screen needs them (the UI never shows dates) |
 | Validation | Every body/query/param goes through a Zod schema in `validators/`; unknown fields are stripped |
 | Body size | `express.json({ limit: '100kb' })`. Images never go through the server |
-| CORS | `origin: CLIENT_URL`, `credentials: true` |
+| CORS | On `/api` only: `origin: CLIENT_URL`, `credentials: true`. In production the app is served from the same origin (§13), so CORS isn't needed there |
 | Status codes | 200 OK, 201 Created, 204 never (always return the JSON envelope), 400, 401, 404, 409, 422, 429, 500. Malformed JSON and bodies over the limit answer 400 `VALIDATION_ERROR` (not 413) |
 
 ---
@@ -220,7 +223,7 @@ Every response, success or error, uses this envelope.
 | Token | Lifetime | Where it lives |
 |---|---|---|
 | Access token (JWT, HS256, `sub` = user id) | 15 minutes | Client memory only; sent as `Authorization: Bearer` |
-| Refresh token (random 256-bit, stored hashed in `refresh_tokens`) | 30 days, sliding | httpOnly, Secure cookie `rt`, `path=/api/v1/auth`. `SameSite=Lax` if client and server share a site; `None` if they are on different domains (decide with hosting) |
+| Refresh token (random 256-bit, stored hashed in `refresh_tokens`) | 30 days, sliding | httpOnly, Secure cookie `rt`, `path=/api/v1/auth`. `SameSite=Lax` (decided in phase 10: the production server serves the app on the same address, §13); `None` only if the app ever moves to another domain |
 
 - **Refresh** rotates: the old token gets `revoked_at` + `replaced_by_id`, a new one is issued, and its expiry resets to 30 days.
 - **Reuse** of an already-rotated token → revoke the whole `family_id` → `SESSION_EXPIRED` (and the cookie is cleared).
@@ -492,7 +495,7 @@ Percentages are rounded integers (0 when there's nothing to count). Computed wit
    and the `public_id` prefix, so the saved id is `wardrobe/<userId>/<kind>/<uuid>`. Cloudinary has no max-size upload param, so 8 MB is checked in step 5.
 3. Browser uploads the file straight to Cloudinary with those params.
 4. Client calls the resource endpoint (`POST /items`, `POST /looks`, `PUT /me/avatar`, `PUT /me/cover`) with the `publicId`.
-5. Server **verifies** with the Cloudinary Admin API that the file exists, is under the user's folder and the right kind's folder, and is within limits. Then it reads `url/width/height/bytes/format` and creates the `images` row.
+5. Server **verifies** with the Cloudinary Admin API that the file exists, is under the user's folder and the right kind's folder, is within limits and was uploaded less than **12 hours** ago (so the 24 h clean-up below can never delete a file that is about to be saved; decided in phase 10). Then it reads `url/width/height/bytes/format` and creates the `images` row.
    Anything wrong → `UPLOAD_INVALID`, including a `publicId` already used by another image row.
 6. If the database write fails after verification → delete the Cloudinary file, **unless** the failure is that another row already uses it.
 
@@ -527,9 +530,9 @@ Abandoned uploads (signed and uploaded, but never saved) are cleaned up by a wee
 ## 10. Environment variables (`.env.example`)
 
 ```
-NODE_ENV=development
+NODE_ENV=development      # production on the host: serves client/dist and runs the clean-up jobs
 PORT=4000
-CLIENT_URL=http://localhost:5173
+CLIENT_URL=http://localhost:5173   # production: the app's own address, e.g. https://drape.onrender.com
 
 DATABASE_URL=postgresql://...-pooler.../wardrobe?sslmode=verify-full   # Neon pooled
 DIRECT_URL=postgresql://.../wardrobe?sslmode=verify-full                # Neon direct (migrations)
@@ -537,8 +540,8 @@ DIRECT_URL=postgresql://.../wardrobe?sslmode=verify-full                # Neon d
 JWT_ACCESS_SECRET=change-me-64-random-chars
 ACCESS_TOKEN_TTL=15m
 REFRESH_TOKEN_TTL_DAYS=30
-COOKIE_SAMESITE=lax        # lax | none (none when client and server are on different domains)
-TRUST_PROXY=loopback       # optional, default loopback; a hop count like 1 behind the host's proxy (set with hosting)
+COOKIE_SAMESITE=lax        # lax | none (lax: app and API on one address, as in production)
+TRUST_PROXY=loopback       # optional, default loopback; Render: 1; behind Caddy on the same machine: loopback
 
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
@@ -551,12 +554,29 @@ CLOUDINARY_API_SECRET=
 
 ## 11. Background jobs
 
-No job runner in v1. Two small scripts (`npm run job:tokens`, `npm run job:uploads`), scheduled later with the host's cron feature:
+No job runner or host cron. The production server schedules both jobs itself (`jobs/cleanup.ts`, started from
+`server.ts` only when `NODE_ENV=production`, decided in phase 10); `npm run job:tokens` / `npm run job:uploads`
+(server) run one by hand.
 
 | Job | Frequency | Does |
 |---|---|---|
-| Expired tokens | daily | delete `refresh_tokens` expired more than 7 days ago |
-| Orphan uploads | weekly | delete Cloudinary files with no `images` row, older than 24 h |
+| Expired tokens | daily, and 5 min after each start | delete `refresh_tokens` expired more than 7 days ago (`token.service`) |
+| Orphan uploads | weekly, and 10 min after each start | delete Cloudinary files under `wardrobe/` with no `images` row, older than 24 h (`image.service`) |
+
+- Timers use `setInterval(...).unref()`. A run never overlaps itself; both jobs are safe to repeat, so a restart
+  only means an extra run. Failures are `console.error`ed and retried next time; success prints nothing.
+- Orphan uploads lists `wardrobe/` with the Admin API (500 files per call, at most 20 calls per run, §12), then
+  deletes the leftovers 100 at a time. It deletes real photos if it's wrong, so it only deletes when it is sure:
+  - only names the app makes (`wardrobe/<userId>/<kind>/<uuid>`) of users that exist in this database (a deleted
+    account's leftovers, if its folder delete failed, are left alone);
+  - a file with an `images` row is kept, and upload verification refuses files older than 12 h (§8.12), so a file
+    older than 24 h with no row can never get one;
+  - a failed listing or database query deletes nothing;
+  - if more than 20 files, and more than half of the old files of known users, have no row, it deletes nothing and
+    `console.error`s why (that looks like a wrong or emptied database).
+  - With a `prefix`, Cloudinary lists by `public_id`, so past 10,000 files a run only sees the first 10,000 (fine for v1).
+- Not run in development: a laptop's `.env` may point at a different database than the one that owns the
+  Cloudinary files, and the job would then delete real photos. One Cloudinary account belongs to one database.
 
 ---
 
@@ -564,7 +584,32 @@ No job runner in v1. Two small scripts (`npm run job:tokens`, `npm run job:uploa
 
 | Topic | Note |
 |---|---|
-| Hosting | Not decided. Must not sleep for long (owner's requirement). Affects `COOKIE_SAMESITE` and the cron jobs |
+| Hosting | Recommended in phase 10, owner to deploy: Render free web service (Singapore) + a keep-awake ping, fallback Oracle Cloud Always Free; see `DEPLOY.md`. `COOKIE_SAMESITE=lax`, jobs in-process (§11, §13) |
 | Email verification / password reset | Out of scope for v1 |
 | Tests | Out of scope for v1 |
 | Cloudinary Admin API limit | Upload verification (§8.12 step 5) uses the Admin API, which allows **500 calls per hour** per Cloudinary account on the free plan, shared by all users. Fine for one person; revisit before more users (e.g. verify the signed upload response instead) |
+
+---
+
+## 13. Production (single origin, decided in phase 10)
+
+With `NODE_ENV=production` the server also serves the built client, so the app and the API share one address
+(steps for the owner in `DEPLOY.md`):
+
+- Root scripts: `npm run install:ci` (`npm ci --include=dev` in root, server and client), `npm run build`
+  (server `tsc`, then the client with `vite build --mode deploy`, which sets `VITE_API_URL=/api/v1` unless the host
+  sets it), `npm run db:deploy` (`prisma migrate deploy`), `npm start` (`node dist/server.js` in `server/`).
+- `app.ts`, after `/api/v1`: `express.static(client/dist)` when `client/dist/index.html` exists. `/assets/*` (hashed
+  names) → `Cache-Control: public, max-age=31536000, immutable`; everything else (`index.html`, `sw.js`, the
+  manifest, icons, category photos) → `no-cache`. Any other `GET` that isn't under `/api`, has no file extension and
+  accepts HTML gets `index.html` (`no-cache`); the rest falls through to the 404 envelope.
+- helmet on every response: `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: credentialless`
+  (03 §12) and this Content-Security-Policy:
+  `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; manifest-src 'self';
+  script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com;
+  img-src 'self' data: blob: https://res.cloudinary.com;
+  connect-src 'self' blob: data: https://api.cloudinary.com https://res.cloudinary.com https://staticimgly.com https://fonts.googleapis.com https://fonts.gstatic.com`.
+  Background removal starts its runtime from `blob:` URLs, compiles WebAssembly and uses `new Function()` (hence
+  `'unsafe-eval'`); checked in headless Chrome against the production build with no violations.
+- Cookie `rt`: `Secure`, `SameSite=Lax`. `TRUST_PROXY`: the host's hop count (Render: `1`).

@@ -30,3 +30,11 @@ Cloudflare tunnel.
    `/api` to the API) and opens a tunnel.
 3. Open the `https://….trycloudflare.com` address it prints on your phone. The address is public while the
    command runs and changes every time.
+
+## Production
+
+`npm run build` builds the API and the app; `npm start` runs the production server, which serves the app and
+the API on one address (set `NODE_ENV=production`). Step-by-step free hosting: [`DEPLOY.md`](DEPLOY.md).
+
+Clean-up jobs (expired sessions daily, abandoned uploads weekly) run inside the production server. To run one
+by hand: `npm --prefix server run job:tokens` or `npm --prefix server run job:uploads`.

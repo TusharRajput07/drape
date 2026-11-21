@@ -19,7 +19,7 @@ export function TagPicker({ tags, disabled }: Props) {
 
   if (all.isPending) {
     return (
-      <div className="mt-3.5 grid grid-cols-4 gap-2">
+      <div className="mt-3.5 grid grid-cols-4 gap-2" role="status" aria-label="Loading">
         {Array.from({ length: 4 }, (_, i) => (
           <div key={i} className="aspect-square animate-pulse rounded-[14px] bg-soft" />
         ))}

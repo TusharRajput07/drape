@@ -80,7 +80,7 @@ export function LookbooksPage() {
       </p>
 
       {list.isPending ? (
-        <div className={LOOK_GRID}>
+        <div className={LOOK_GRID} role="status" aria-label="Loading">
           {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className="aspect-[3/4] animate-pulse rounded-2xl bg-soft" />
           ))}
@@ -103,7 +103,11 @@ export function LookbooksPage() {
                 key={look.id}
                 type="button"
                 onClick={() => setOpenLook(look)}
-                aria-label="Look, open details"
+                aria-label={
+                  look.items.length
+                    ? `Look with ${look.items.length} tagged ${look.items.length === 1 ? 'piece' : 'pieces'}, open details`
+                    : 'Look, open details'
+                }
                 className="relative aspect-[3/4] overflow-hidden rounded-2xl bg-soft"
               >
                 <img

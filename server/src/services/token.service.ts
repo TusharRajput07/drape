@@ -123,3 +123,14 @@ async function revokeFamily(familyId: string, at: Date): Promise<void> {
     data: { revokedAt: at },
   });
 }
+
+// Daily clean-up job (02 §11): refresh tokens that expired more than 7 days ago are of no use to
+// anyone. Revoked tokens stay until they expire too, so reuse is still detected meanwhile.
+const EXPIRED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+
+export async function deleteExpiredRefreshTokens(now = new Date()): Promise<number> {
+  const { count } = await prisma.refreshToken.deleteMany({
+    where: { expiresAt: { lt: new Date(now.getTime() - EXPIRED_KEEP_MS) } },
+  });
+  return count;
+}

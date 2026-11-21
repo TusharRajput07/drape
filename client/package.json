@@ -12,7 +12,8 @@
     "typecheck": "tsc -b",
     "lint": "oxlint",
     "preview": "vite preview",
-    "phone": "tsc -b && vite build --mode phone && vite preview"
+    "phone": "tsc -b && vite build --mode phone && vite preview",
+    "build:deploy": "tsc -b && vite build --mode deploy"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.2",

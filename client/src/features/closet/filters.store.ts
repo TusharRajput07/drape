@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import type { CategorySlug } from '@/lib/api-types';
+import { onSessionEnd } from '@/lib/session-reset';
 
-// Home's tab and filters (03 §4.2). Not persisted.
+// Home's tab and filters (03 §4.2). Not persisted; back to All with no filters when the session ends.
 
 export type ClosetTab = 'all' | CategorySlug;
 export type Sort = 'newest' | 'oldest';
@@ -48,6 +49,8 @@ export const useFiltersStore = create<FiltersState>()((set) => ({
   setSort: (sort) => set({ sort }),
   clear: () => set(NONE),
 }));
+
+onSessionEnd(() => useFiltersStore.setState({ tab: 'all', ...NONE }));
 
 // Shows Home on a tab with no filters, so a just-added item is in view.
 export function showTab(tab: ClosetTab) {

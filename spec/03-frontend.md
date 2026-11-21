@@ -39,6 +39,7 @@ client/
 │   ├── main.tsx                  React root, QueryClientProvider, RouterProvider, Toaster
 │   ├── app/
 │   │   ├── router.tsx            all routes (§3)
+│   │   ├── pages.tsx             every page lazy-loaded (React.lazy + Suspense, §3)
 │   │   ├── query-client.ts       TanStack Query defaults
 │   │   └── layouts/
 │   │       ├── AppLayout.tsx     page + bottom nav
@@ -54,6 +55,8 @@ client/
 │   │   ├── accent.ts             accent colour table (§7) + applyAccent()
 │   │   ├── categories.ts         the 4 category slugs in tab order + labels (Tops / Top…)
 │   │   ├── use-online.ts         online/offline hook (offline screen, session check)
+│   │   ├── session-reset.ts      stores register a reset; endSession() runs them (§4.2)
+│   │   ├── load-chunk.ts         loads a lazy page; reloads once if an old tab's chunk is gone (§3)
 │   │   ├── profile-rules.ts      name/username Zod rules (signup and the Settings profile form)
 │   │   └── utils.ts              cn() etc. (shadcn)
 │   ├── components/
@@ -62,6 +65,7 @@ client/
 │   │   ├── PageHeader.tsx        title left, action button right (the agreed header pattern)
 │   │   ├── FormField.tsx         label + input + error under it
 │   │   ├── FullScreenLoader.tsx  shown while the session check runs
+│   │   ├── PageSkeleton.tsx      shown while a page's code downloads
 │   │   ├── OfflineScreen.tsx     "You're offline" (§10)
 │   │   ├── HangerIcon.tsx        the prototype's hanger (lucide has none)
 │   │   ├── CategoryImage.tsx     tab photo in a circle (line icon until the photo exists)
@@ -95,7 +99,7 @@ client/
 ├── index.html
 ├── vite.config.ts                React + Tailwind + PWA plugins, `@` alias to src, `/api` forwarded to the server, `phone` mode
 ├── components.json               shadcn config
-├── .env.example                  VITE_API_URL=http://localhost:4000/api/v1
+├── .env.example                  VITE_API_URL=http://localhost:4000/api/v1 (development; production builds use /api/v1)
 └── tsconfig.json
 ```
 
@@ -126,6 +130,12 @@ Rules:
 - Item details, outfit details, look details, the filter sheet, the upload flow and confirmations are **sheets/dialogs**, not routes.
 - The bottom nav's centre **+** opens a sheet: Upload clothes · Create outfit · Add to wishlist.
 - Sub-pages (`/lookbooks`, `/stats`, `/settings`) show a back arrow in `PageHeader`.
+- **Code splitting** (phase 10): every page is a lazy chunk (`app/pages.tsx`). Inside the app layout a page waits on
+  `PageSkeleton` (the bottom nav stays); login/signup on a spinner in the card; the builder on the full-screen spinner.
+  The upload flow loads the first time it opens. 1.5 s after the app opens, the four tab pages and the upload flow
+  are fetched in the background. Background removal stays a separate lazy import (§9). If a page's code fails to
+  load (a tab still open on the old app after a deploy), the app reloads, at most once a minute; offline it waits
+  for the connection and tries again (`lib/load-chunk.ts`).
 
 ---
 
@@ -162,6 +172,11 @@ Query keys:
 | `auth.store` | `accessToken`, `status: 'unknown' \| 'authed' \| 'guest'` | **No.** Memory only (the refresh cookie restores it) |
 | `filters.store` | closet tab, subcategory/colour filters, liked, unused, sort | No |
 | `builder.store` | current pick per row (item id; `null` = no shoes), locks, subcategory per row, edit target, picked accessories | No |
+| `upload.store` | whether the upload flow is open, its starting category | No |
+
+The filters, builder and upload stores reset when the session ends (logout, account delete, expired session):
+each registers a reset with `lib/session-reset.ts` and `endSession()` runs them, so the next login on the device starts
+on All with no filters.
 
 ---
 
@@ -270,7 +285,7 @@ The prototype is the visual reference. These are the rules to keep.
 - `PageHeader` "Wishlist".
 - The prototype's line under the header: "Clothes you want to buy. Tap one to open it on the shop's website."
 - A link input + **Add**:
-  - The link is checked in the browser first: empty → "Paste a product link first."; not a link → "That doesn't look like a link. Paste the full product address, for example https://www.myntra.com/…". A link without `http(s)://` gets `https://` added.
+  - The link is checked in the browser first. A shop's share message ("Check out this product https://…") gives its first `http(s)` link (else its first `www.` link), trailing punctuation dropped. Empty → "Paste a product link first."; not a link → "That doesn't look like a link. Paste the full product address, for example https://www.myntra.com/…". A link without `http(s)://` gets `https://` added.
   - The input clears at once, so another link can be pasted while the server fetches; each link being added shows its own pending card (spinner, "Getting details…", the link's host). A link that fails comes back into the input if it's empty.
   - `WISHLIST_DUPLICATE` → "Already in your wishlist." under the input; a `VALIDATION_ERROR` shows its message there too. Success → toast "Added to wishlist from Myntra".
   - The photo is the shop page's own (`og:image`, copied by the server, 02 §8.9). There's no own-photo upload for wishlist items in v1, so a shop that hides its photo (Amazon, to bots) gives a card without one.
@@ -337,7 +352,9 @@ The prototype is the visual reference. These are the rules to keep.
 
 - shadcn components are restyled through these variables (primary = accent).
 - Phone first. Content max-width 1040 px on desktop. Grids: 2 columns on phones, more as width allows.
-- Respect `prefers-reduced-motion`. Visible focus rings. Every icon-only button has an `aria-label`.
+- Respect `prefers-reduced-motion`: animations and transitions finish at once (sheets still open and close), the builder
+  scrolls without gliding, and only spinners keep turning (slowly). Visible focus rings. Every icon-only button has an
+  `aria-label`; loading skeletons are `role="status"` ("Loading").
 
 ---
 
@@ -408,6 +425,7 @@ comparing the default model (`isnet_fp16`, ~88 MB) with the small one (`isnet_qu
   - `display: standalone`, `start_url: /`, `background_color: #FFFFFF`, `theme_color`: plum `#6A4566`.
   - Icons 192, 512 and maskable 512.
 - **Service worker caches:** the app shell (JS/CSS/fonts/HTML), the category images, and the background-removal model/WASM files (`staticimgly.com`, cache-first, 1 year).
+- **Not precached:** the background-removal runtime (`ort*.js`, ~390 kB each); it downloads with the first upload and the browser's cache keeps it (hashed names, cached a year, 02 §13).
 - **Not cached:** API responses and Cloudinary images. The app needs internet for data (offline browsing is out of scope).
 - If the app is opened offline: a simple "You're offline" screen. It also covers the app whenever the phone goes offline, and goes away when it's back.
 - The service worker only runs in the built app (`npm run phone`), not in `npm run dev`.
@@ -445,5 +463,5 @@ Copy rules: short, plain, active voice; errors say what to do next; no dates; no
 | Topic | Note |
 |---|---|
 | Category tab photos | Owner supplies 5 real photos (all, top, bottom, shoes, accessory) |
-| HTTPS + cross-origin isolation | **Decided in phase 6.** The whole app is isolated with `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless` (set in `vite.config.ts` for the dev and preview servers; the host must send the same two headers, phase 10). With `credentialless` the cross-origin files load unchanged: Cloudinary images (items, looks, avatar, cover, wishlist photos; Cloudinary also sends CORS headers), Google Fonts and the model files (img.ly's CDN sends CORS + CORP headers). Browsers without `credentialless` support (Safari) simply aren't isolated: nothing breaks, the CPU fallback is single-threaded there. HTTPS for phone testing: the Cloudflare tunnel (§10.1) |
-| Hosting | Decided later. Affects `VITE_API_URL` and the cookie `SameSite` setting |
+| HTTPS + cross-origin isolation | **Decided in phase 6.** The whole app is isolated with `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless` (set in `vite.config.ts` for the dev and preview servers; in production the Express server sends them with the app, 02 §13). With `credentialless` the cross-origin files load unchanged: Cloudinary images (items, looks, avatar, cover, wishlist photos; Cloudinary also sends CORS headers), Google Fonts and the model files (img.ly's CDN sends CORS + CORP headers). Browsers without `credentialless` support (Safari) simply aren't isolated: nothing breaks, the CPU fallback is single-threaded there. HTTPS for phone testing: the Cloudflare tunnel (§10.1) |
+| Hosting | Decided in phase 10: the server serves the app on one address, so production builds use `VITE_API_URL=/api/v1` and the cookie is `SameSite=Lax` (02 §13). Host recommendation and steps: `DEPLOY.md` |

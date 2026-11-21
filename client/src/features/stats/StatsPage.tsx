@@ -75,7 +75,7 @@ export function StatsPage() {
           }
         />
       ) : (
-        <div className="grid gap-3.5 md:grid-cols-2">
+        <div className="grid gap-3.5 md:grid-cols-2" role="status" aria-label="Loading">
           <div className="h-[300px] animate-pulse rounded-[20px] bg-soft md:col-span-2" />
           {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className="h-[130px] animate-pulse rounded-[20px] bg-soft" />

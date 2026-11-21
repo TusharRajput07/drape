@@ -46,7 +46,7 @@ export const OUTFIT_GRID =
 
 export function OutfitGridSkeleton() {
   return (
-    <div className={OUTFIT_GRID}>
+    <div className={OUTFIT_GRID} role="status" aria-label="Loading">
       {Array.from({ length: 4 }, (_, i) => (
         <div key={i} className="aspect-[3/5] animate-pulse rounded-[18px] bg-soft" />
       ))}

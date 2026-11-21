@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => {
   // `npm run phone` builds with this mode: the app calls the API on its own address (/api, forwarded below),
   // so a phone reaching the laptop through one HTTPS tunnel address gets both the app and the API.
   if (mode === 'phone') process.env.VITE_API_URL = '/api/v1';
+  // `npm run build` (root) builds with this mode for production, where the server serves the app itself
+  // (02 §13): same address, so /api/v1. A VITE_API_URL set on the host (an API on another domain) wins.
+  if (mode === 'deploy') process.env.VITE_API_URL ??= '/api/v1';
 
   return {
     plugins: [
@@ -47,6 +50,9 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png,webp,woff2}'],
+          // The background-removal runtime (~390 kB each) isn't part of the app shell: it's only
+          // downloaded when an upload opens (then kept by the browser's cache, 02 §13).
+          globIgnores: ['**/ort*.js', '**/ort*.mjs'],
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
             // Background-removal model + WASM (version-pinned paths on img.ly's CDN): download once per device.

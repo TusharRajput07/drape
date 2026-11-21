@@ -1,19 +1,22 @@
 import { createBrowserRouter, Navigate } from 'react-router';
-import { LoginPage } from '@/features/auth/LoginPage';
-import { SignupPage } from '@/features/auth/SignupPage';
-import { BuilderPage } from '@/features/builder/BuilderPage';
-import { ClosetPage } from '@/features/closet/ClosetPage';
-import { LikedPage } from '@/features/liked/LikedPage';
-import { LookbooksPage } from '@/features/looks/LookbooksPage';
-import { OutfitsPage } from '@/features/outfits/OutfitsPage';
-import { SettingsPage } from '@/features/settings/SettingsPage';
-import { StatsPage } from '@/features/stats/StatsPage';
-import { WishlistPage } from '@/features/wishlist/WishlistPage';
 import { AppLayout } from './layouts/AppLayout';
 import { AuthLayout } from './layouts/AuthLayout';
 import { ProtectedRoute } from './layouts/ProtectedRoute';
+import {
+  BuilderPage,
+  ClosetPage,
+  LikedPage,
+  LoginPage,
+  LookbooksPage,
+  OutfitsPage,
+  SettingsPage,
+  SignupPage,
+  StatsPage,
+  WishlistPage,
+} from './pages';
 
 // All routes (03 §3). Details, filters, uploads and confirmations are sheets, not routes.
+// Each page is lazy-loaded (app/pages.tsx).
 export const router = createBrowserRouter([
   {
     element: <AuthLayout />,

@@ -22,6 +22,9 @@ export type UploadedFile = {
 
 const ALLOWED_FORMATS = ['webp', 'png', 'jpg'];
 const MAX_BYTES = 8 * 1024 * 1024;
+// A file uploaded longer ago than this can't be saved any more: the clean-up job deletes files with
+// no images row after 24 hours (02 §11), so it must never meet one that is about to get a row.
+const MAX_UPLOAD_AGE_MS = 12 * 60 * 60 * 1000;
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
 const userFolder = (userId: string) => `wardrobe/${userId}`;
@@ -40,6 +43,7 @@ type Resource = {
   resource_type: string;
   type: string;
   asset_folder?: string;
+  created_at: string;
 };
 
 // Step 2: the params the browser sends to Cloudinary unchanged. Cloudinary refuses a signature
@@ -64,7 +68,7 @@ export function signUpload(userId: string, kind: UploadKind) {
 }
 
 // Step 5: the file must exist in this user's folder for this kind, be an image within the
-// limits, and not be used by another image row yet. Anything else → UPLOAD_INVALID.
+// limits, uploaded in the last 12 hours, and not be used by another image row yet. Anything else → UPLOAD_INVALID.
 export async function verifyUpload(
   userId: string,
   kind: UploadKind,
@@ -87,6 +91,7 @@ export async function verifyUpload(
     resource.type === 'upload' &&
     (resource.asset_folder === undefined || resource.asset_folder === folder) &&
     resource.bytes <= MAX_BYTES &&
+    !(Date.now() - Date.parse(resource.created_at) > MAX_UPLOAD_AGE_MS) &&
     ALLOWED_FORMATS.includes(resource.format);
   if (!fits) throw uploadInvalid();
 
@@ -182,4 +187,87 @@ export async function deleteUserFolder(userId: string): Promise<void> {
     // 404: the user never uploaded anything, so there's no folder.
     if ((err as { error?: { http_code?: number } }).error?.http_code !== 404) console.error(err);
   }
+}
+
+// Weekly clean-up job (02 §11): files under wardrobe/ with no images row, older than 24 hours.
+// That's an upload that was signed and sent to Cloudinary but never saved (verifyUpload refuses files
+// older than 12 hours, so none of these can still be saved), or a file whose delete failed earlier.
+// Listing costs one Admin API call per 500 files (shared 500 calls/hour limit, 02 §12), so a run looks at
+// MAX_PAGES pages at most.
+//
+// It deletes real photos if it's wrong, so it only ever deletes what it is sure about:
+// - only names this app makes (wardrobe/<userId>/<kind>/<uuid>), of users that exist in this database
+//   (a database that doesn't own these files matches no one; a deleted account's files are left alone);
+// - nothing at all if a listing or a database query fails, or if the leftovers look like too many
+//   (more than MAX_ORPHAN_SHARE of the old files and more than ORPHAN_ALARM files): that smells like a
+//   wrong or emptied database, so it stops and says so.
+const ORPHAN_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_PAGES = 20;
+const MAX_ORPHAN_SHARE = 0.5;
+const ORPHAN_ALARM = 20;
+const APP_FILE = new RegExp(`^wardrobe/(${UUID})/(?:item|look|avatar|cover|wishlist)/${UUID}$`);
+
+type Listing = {
+  resources: { public_id: string; created_at: string }[];
+  next_cursor?: string;
+};
+
+export async function deleteOrphanUploads(now = new Date()): Promise<number> {
+  const cutoff = now.getTime() - ORPHAN_AGE_MS;
+  const old: { publicId: string; userId: string }[] = [];
+  let cursor: string | undefined;
+
+  // 1. Every old file this app made (a failed listing throws: nothing is deleted on a partial picture).
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const listing = (await cloudinary.api.resources({
+      type: 'upload',
+      resource_type: 'image',
+      prefix: 'wardrobe/',
+      max_results: 500,
+      ...(cursor ? { next_cursor: cursor } : {}),
+    })) as Listing;
+
+    for (const r of listing.resources) {
+      const userId = APP_FILE.exec(r.public_id)?.[1];
+      const created = Date.parse(r.created_at);
+      if (userId && Number.isFinite(created) && created < cutoff) {
+        old.push({ publicId: r.public_id, userId });
+      }
+    }
+
+    cursor = listing.next_cursor;
+    if (!cursor) break;
+  }
+  if (!old.length) return 0;
+
+  // 2. Keep those of unknown users and those with an images row.
+  const users = new Set<string>();
+  const saved = new Set<string>();
+  const userIds = [...new Set(old.map((f) => f.userId))];
+  for (let i = 0; i < userIds.length; i += 500) {
+    const found = await prisma.user.findMany({
+      where: { id: { in: userIds.slice(i, i + 500) } },
+      select: { id: true },
+    });
+    found.forEach((u) => users.add(u.id));
+  }
+  const ofUsers = old.filter((f) => users.has(f.userId));
+  for (let i = 0; i < ofUsers.length; i += 500) {
+    const rows = await prisma.image.findMany({
+      where: { publicId: { in: ofUsers.slice(i, i + 500).map((f) => f.publicId) } },
+      select: { publicId: true },
+    });
+    rows.forEach((r) => saved.add(r.publicId));
+  }
+  const orphans = ofUsers.filter((f) => !saved.has(f.publicId)).map((f) => f.publicId);
+
+  // 3. The sanity check, then delete.
+  if (orphans.length > ORPHAN_ALARM && orphans.length > ofUsers.length * MAX_ORPHAN_SHARE) {
+    throw new Error(
+      `Orphan uploads: ${orphans.length} of ${ofUsers.length} old files have no images row. ` +
+        'That looks like the wrong database, so nothing was deleted.',
+    );
+  }
+  await deleteFiles(orphans);
+  return orphans.length;
 }

@@ -35,7 +35,7 @@ const ITEM_GRID =
 
 export function ItemGridSkeleton() {
   return (
-    <div className={ITEM_GRID}>
+    <div className={ITEM_GRID} role="status" aria-label="Loading">
       {Array.from({ length: 4 }, (_, i) => (
         <div key={i} className="aspect-[4/5] animate-pulse rounded-2xl bg-soft" />
       ))}

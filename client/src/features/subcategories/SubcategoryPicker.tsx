@@ -80,7 +80,11 @@ export function SubcategoryPicker({ categoryId, selected, onSelect, disabled }: 
           </Button>
         </form>
       )}
-      {error && <p className="mx-1 mt-2 text-[13px] text-danger">{error}</p>}
+      {error && (
+        <p role="alert" className="mx-1 mt-2 text-[13px] text-danger">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

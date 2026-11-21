@@ -2,6 +2,7 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { queryClient } from '@/app/query-client';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { ApiError, type Failure, type Success } from './api-types';
+import { resetSessionState } from './session-reset';
 
 // The one Axios instance (03 §5). Success resolves to the envelope; failure rejects with ApiError.
 
@@ -53,10 +54,12 @@ export function refreshAccessToken(): Promise<string> {
   return refreshing;
 }
 
-// The session is over: forget the token and every cached answer. ProtectedRoute then sends the user to /login.
+// The session is over: forget the token, every cached answer and the per-user stores (filters, builder,
+// upload). ProtectedRoute then sends the user to /login.
 export function endSession() {
   useAuthStore.getState().signOut();
   queryClient.clear();
+  resetSessionState();
 }
 
 api.interceptors.response.use(

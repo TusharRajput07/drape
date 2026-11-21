@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Outfit } from '@/lib/api-types';
+import { onSessionEnd } from '@/lib/session-reset';
 
 // The outfit builder's picks (03 §4.2). Not persisted; cleared when the builder closes.
 
@@ -59,3 +60,5 @@ export function preselect(outfit: Outfit) {
 export function resetBuilder() {
   useBuilderStore.setState(EMPTY);
 }
+
+onSessionEnd(resetBuilder);

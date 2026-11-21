@@ -249,7 +249,7 @@ function Carousel({ row, slides, selected, onSelect }: CarouselProps) {
             type="button"
             data-slide
             aria-pressed={on}
-            aria-label={item ? item.subcategory.name : 'No shoes'}
+            aria-label={item ? `${item.color.name} ${item.subcategory.name}` : 'No shoes'}
             onClick={() => i !== selected && onSelect(i)}
             className={cn(
               'grid min-h-0 snap-center place-items-center transition-[opacity,transform] duration-200',

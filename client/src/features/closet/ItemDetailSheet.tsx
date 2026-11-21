@@ -121,7 +121,11 @@ function ItemDetail({ tapped, onClose }: { tapped: Item; onClose: () => void }) 
         <dt className="text-muted">Subcategory</dt>
         <dd>
           {item.subcategory.name}
-          <LinkButton onClick={() => setMode(mode === 'subcategory' ? null : 'subcategory')}>
+          <LinkButton
+            label="Change subcategory"
+            expanded={mode === 'subcategory'}
+            onClick={() => setMode(mode === 'subcategory' ? null : 'subcategory')}
+          >
             Change
           </LinkButton>
         </dd>
@@ -129,7 +133,13 @@ function ItemDetail({ tapped, onClose }: { tapped: Item; onClose: () => void }) 
         <dd className="inline-flex items-center gap-2">
           <ColorDot hex={item.color.hex} className="size-4" />
           {item.color.name}
-          <LinkButton onClick={() => setMode(mode === 'color' ? null : 'color')}>Change</LinkButton>
+          <LinkButton
+            label="Change colour"
+            expanded={mode === 'color'}
+            onClick={() => setMode(mode === 'color' ? null : 'color')}
+          >
+            Change
+          </LinkButton>
         </dd>
         <dt className="text-muted">In outfits</dt>
         <dd className="tabular-nums">{usage?.outfits ?? '…'}</dd>
@@ -222,10 +232,21 @@ function ItemDetail({ tapped, onClose }: { tapped: Item; onClose: () => void }) 
   );
 }
 
-function LinkButton(props: { onClick: () => void; children: string }) {
+function LinkButton({
+  label,
+  expanded,
+  ...props
+}: {
+  label: string;
+  expanded: boolean;
+  onClick: () => void;
+  children: string;
+}) {
   return (
     <button
       type="button"
+      aria-label={label}
+      aria-expanded={expanded}
       className="ml-1 text-[13px] font-medium text-accent underline underline-offset-2"
       {...props}
     />

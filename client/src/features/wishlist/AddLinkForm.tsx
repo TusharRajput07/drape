@@ -9,10 +9,20 @@ import { useAddToWishlist } from './wishlist.api';
 const NOT_A_LINK =
   "That doesn't look like a link. Paste the full product address, for example https://www.myntra.com/…";
 
-// What was pasted, as a full http(s) link, or null. A link without "https://" gets it added
-// (shops' share buttons sometimes copy just "www.myntra.com/…").
+// The first link in a shop's share message ("Check out this product https://…"), an http(s) one
+// before a bare "www.…" one, without the punctuation that often follows it.
+function linkInText(raw: string): string | null {
+  const found = (raw.match(/https?:\/\/[^\s<>"']+/i) ?? raw.match(/\bwww\.[^\s<>"']+/i))?.[0];
+  return found ? found.replace(/[.,;:!?)\]}]+$/, '') : null;
+}
+
+// What was pasted, as a full http(s) link, or null. A share message gives its first link; a link
+// without "https://" gets it added (shops' share buttons sometimes copy just "www.myntra.com/…").
 function toLink(raw: string): string | null {
-  const text = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const found = linkInText(raw);
+  if (!found && /\s/.test(raw)) return null;
+  const candidate = found ?? raw;
+  const text = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
   try {
     const url = new URL(text);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
