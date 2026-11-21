@@ -66,9 +66,9 @@ function ActionRow({ icon: Icon, title, text, onSelect }: Action) {
 export function BottomNav({ onUpload }: { onUpload: () => void }) {
   const [adding, setAdding] = useState(false);
   const navigate = useNavigate();
-  const go = (to: string) => () => {
+  const go = (to: string, state?: object) => () => {
     setAdding(false);
-    navigate(to);
+    navigate(to, { state });
   };
 
   const actions: Action[] = [
@@ -91,7 +91,8 @@ export function BottomNav({ onUpload }: { onUpload: () => void }) {
       icon: LinkIcon,
       title: 'Add to wishlist',
       text: 'Save a product link from any shopping site.',
-      onSelect: go('/wishlist'),
+      // Lands on the link input, ready to paste.
+      onSelect: go('/wishlist', { focusLink: true }),
     },
   ];
 

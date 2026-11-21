@@ -69,7 +69,7 @@ export function useItem(id: string | null) {
 }
 
 // After any change: lists, counts in the profile header, stats, subcategory item counts (03 §4.1),
-// and the outfits that show the item's subcategory.
+// and the outfits and looks that show the item.
 function refreshWardrobe(queryClient: QueryClient) {
   for (const queryKey of [
     ['items'],
@@ -79,6 +79,8 @@ function refreshWardrobe(queryClient: QueryClient) {
     ['subcategories'],
     ['outfits'],
     ['outfit'],
+    ['looks'],
+    ['look'],
   ]) {
     void queryClient.invalidateQueries({ queryKey });
   }

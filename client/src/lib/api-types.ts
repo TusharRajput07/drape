@@ -105,6 +105,18 @@ export type Outfit = {
   accessories: Item[];
 };
 
+// A Lookbook photo and the pieces tagged in it (newest first).
+export type Look = { id: string; image: Image; items: Item[] };
+
+// `image` is null when the shop's page had no photo that could be copied.
+export type WishlistItem = {
+  id: string;
+  url: string;
+  siteName: string;
+  productName: string;
+  image: Image | null;
+};
+
 export type UploadKind = 'item' | 'look' | 'avatar' | 'cover';
 
 export type UploadSignature = {

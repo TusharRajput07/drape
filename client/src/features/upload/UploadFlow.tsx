@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CategoryImage } from '@/components/CategoryImage';
 import { ColorDot, ColorGrid } from '@/components/ColorGrid';
+import { ProgressBar } from '@/components/ProgressBar';
 import { SwitchRow } from '@/components/SwitchRow';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
@@ -273,7 +274,7 @@ function Preview({
             <span className="size-[22px] animate-spin rounded-full border-2 border-border border-t-accent" />
             {removal.ready ? 'Removing background…' : 'Getting the background remover ready…'}
             {!removal.ready && removal.fraction > 0 && removal.fraction < 1 && (
-              <Bar fraction={removal.fraction} label="Download progress" />
+              <ProgressBar fraction={removal.fraction} label="Download progress" />
             )}
           </div>
         )}
@@ -330,7 +331,7 @@ function Preview({
 
       {progress !== null && (
         <div className="mt-4">
-          <Bar fraction={progress} label="Upload progress" />
+          <ProgressBar fraction={progress} label="Upload progress" />
         </div>
       )}
 
@@ -351,25 +352,6 @@ function Eyebrow({ children }: { children: string }) {
     <span className="text-[11px] font-medium tracking-[.09em] text-muted uppercase">
       {children}
     </span>
-  );
-}
-
-function Bar({ fraction, label }: { fraction: number; label: string }) {
-  const pct = Math.round(fraction * 100);
-  return (
-    <div
-      role="progressbar"
-      aria-label={label}
-      aria-valuenow={pct}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      className="h-1.5 w-full overflow-hidden rounded bg-soft"
-    >
-      <span
-        className="block h-full rounded bg-accent transition-[width]"
-        style={{ width: `${pct}%` }}
-      />
-    </div>
   );
 }
 

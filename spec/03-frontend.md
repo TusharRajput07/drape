@@ -72,6 +72,7 @@ client/
 │   │   ├── Segmented.tsx         the prototype's pill switch (sort, Clothes | Outfits)
 │   │   ├── EmptyState.tsx
 │   │   ├── ConfirmBox.tsx        confirm / "can't do that" box inside a sheet
+│   │   ├── ProgressBar.tsx       upload / download progress bar
 │   │   └── InfiniteSentinel.tsx  loads the next page when scrolled into view
 │   ├── features/
 │   │   ├── auth/                 LoginPage, SignupPage, auth.api.ts, auth.store.ts, schemas.ts
@@ -81,7 +82,7 @@ client/
 │   │   ├── subcategories/        SubcategoryPicker, ManageSubcategories, subcategories.api.ts
 │   │   ├── outfits/              OutfitsPage, OutfitDetailSheet, outfits.api.ts
 │   │   ├── builder/              BuilderPage, BuilderRow, AccessoriesSheet, builder.store.ts
-│   │   ├── looks/                LookbooksPage, AddLookFlow, LookDetailSheet, TagPicker, looks.api.ts
+│   │   ├── looks/                LookbooksPage, AddLookFlow, LookDetailSheet, TagPicker, use-tags.ts, looks.api.ts
 │   │   ├── wishlist/             WishlistPage, AddLinkForm, wishlist.api.ts
 │   │   ├── liked/                LikedPage (Clothes | Outfits)
 │   │   ├── stats/                StatsPage, ColorDonut, Bars, stats.api.ts
@@ -265,21 +266,28 @@ The prototype is the visual reference. These are the rules to keep.
 
 ### 6.8 Wishlist
 - `PageHeader` "Wishlist".
+- The prototype's line under the header: "Clothes you want to buy. Tap one to open it on the shop's website."
 - A link input + **Add**:
-  - While adding, a pending card shows "Getting details…".
-  - `WISHLIST_DUPLICATE` → "Already in your wishlist".
-- Cards: photo (or a fallback panel with the shop name), product name, shop name with an external-link icon. Tap → opens the shop link in a new tab.
-- ✕ on a card → **confirm dialog** "Remove from wishlist?" → delete.
+  - The link is checked in the browser first: empty → "Paste a product link first."; not a link → "That doesn't look like a link. Paste the full product address, for example https://www.myntra.com/…". A link without `http(s)://` gets `https://` added.
+  - The input clears at once, so another link can be pasted while the server fetches; each link being added shows its own pending card (spinner, "Getting details…", the link's host). A link that fails comes back into the input if it's empty.
+  - `WISHLIST_DUPLICATE` → "Already in your wishlist." under the input; a `VALIDATION_ERROR` shows its message there too. Success → toast "Added to wishlist from Myntra".
+  - The photo is the shop page's own (`og:image`, copied by the server, 02 §8.9). There's no own-photo upload for wishlist items in v1, so a shop that hides its photo (Amazon, to bots) gives a card without one.
+- Cards: photo (or a fallback panel with the shop name and "No photo"), product name, shop name with an external-link icon. Tap → opens the shop link in a new tab.
+- ✕ on a card → **confirm sheet** "Remove from wishlist?" ("“Name” from Shop will be removed from your wishlist.", Cancel · Remove) → delete, toast "Removed from wishlist".
+- The + sheet's **Add to wishlist** opens this page with the link input focused.
 
 ### 6.9 Lookbooks
 - `PageHeader` with a back arrow: "Lookbooks" left, **Add look** right.
-- Grid of 3:4 photos with an "N tagged" badge.
+- The prototype's note under the header: "Photos of you wearing your clothes. Tag the pieces in each photo."
+- Grid of 3:4 photos with an "N tagged" badge (hidden at 0). Empty: "Your lookbook is empty" + **Add your first look**.
 - **Add look:**
-  1. Pick a photo (background kept, no removal).
+  1. **Add look** opens the phone's photo picker straight away (background kept, no removal). A photo that can't be opened → toast "Couldn't open that photo. Try a JPG or PNG."
   2. Compress to WebP (max 1600 px).
-  3. Tag clothes with a category-chip filter and a 4-column picker (tags optional, up to 20).
-  4. Upload and `POST /looks`.
-- **LookDetailSheet:** the photo, a strip of tagged items (tap → ItemDetailSheet), **Tag clothes** (replaces the tags) and **Delete** (with confirm).
+  3. The **New look** sheet: the photo, then tag clothes with a category-chip filter (All · Tops · Bottoms · Shoes · Accessories) and a 4-column picker (tags optional, up to 20: "A look can have up to 20 tagged pieces."). Cancel · "Save look" / "Save with 3 tagged".
+  4. Upload (progress bar; the sheet can't be closed meanwhile) and `POST /looks`, toast "Look added".
+- **LookDetailSheet:** "Lookbook" eyebrow, title "Look", the photo, a strip of tagged items (tap → ItemDetailSheet, which replaces the look's sheet), **Tag clothes** and **Delete**.
+  - **Tag clothes** turns the sheet into the same picker, starting from the current tags; saving replaces the tags (`PUT /looks/:id/items`), closes the sheet and toasts "Tags saved". Save waits until the closet has loaded, so tags are never wiped by accident.
+  - **Delete** shows a confirm box inside the sheet: "Delete this look? Your clothes stay in your closet." → toast "Look deleted".
 
 ### 6.10 Wardrobe stats
 - **Composition card:**
