@@ -1,5 +1,6 @@
 import { Camera, SlidersHorizontal } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
 import { ItemGrid, ItemGridSkeleton } from '@/components/ItemGrid';
 import { Button } from '@/components/ui/button';
@@ -11,12 +12,24 @@ import { toastError } from '@/lib/errors';
 import { cn } from '@/lib/utils';
 import { CategoryTabs } from './CategoryTabs';
 import { FilterSheet } from './FilterSheet';
-import { activeFilterCount, useFiltersStore } from './filters.store';
+import { activeFilterCount, showUnused, useFiltersStore } from './filters.store';
 import { ItemDetailSheet } from './ItemDetailSheet';
 import { type ItemFilters, useItems, useItemTotal, useUpdateItem } from './items.api';
 
 // Home: profile header, category tabs, filter button and the infinite grid (03 §6.2).
 export function ClosetPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const showUnusedRequested = (location.state as { showUnused?: boolean } | null)?.showUnused;
+
+  // The stats page's "See them" opens Home with the "not in any outfit" filter; the request is
+  // then dropped from the history entry so Back or a reload doesn't apply it again.
+  useLayoutEffect(() => {
+    if (!showUnusedRequested) return;
+    showUnused();
+    void navigate('.', { replace: true, state: null });
+  }, [showUnusedRequested, navigate]);
+
   const f = useFiltersStore();
   const category = f.tab === 'all' ? undefined : f.tab;
   const filtering = activeFilterCount(f);

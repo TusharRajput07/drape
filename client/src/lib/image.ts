@@ -93,3 +93,21 @@ export async function compress(src: HTMLCanvasElement, max: number) {
   if (!png) throw new Error('Could not encode the photo');
   return png;
 }
+
+// The centre square of a photo at `size` px (profile photos show in a circle).
+export function cropSquare(src: HTMLCanvasElement, size: number) {
+  const side = Math.min(src.width, src.height);
+  const out = canvas(Math.min(size, side), Math.min(size, side));
+  ctx2d(out).drawImage(
+    src,
+    (src.width - side) / 2,
+    (src.height - side) / 2,
+    side,
+    side,
+    0,
+    0,
+    out.width,
+    out.height,
+  );
+  return out;
+}

@@ -130,7 +130,26 @@ export type UploadSignature = {
   maxBytes: number;
 };
 
-// Only the parts of GET /stats the closet uses; the stats page (phase 9) adds the rest.
+type Share<K extends string, T> = { [key in K]: T } & { count: number; percent: number };
+
+// GET /stats (02 §8.10). `composition` and `bySubcategory` follow ?category; the rest is the whole closet.
 export type Stats = {
-  composition: { total: number; byColor: { color: Color; count: number; percent: number }[] };
+  composition: { total: number; byColor: Share<'color', Color>[] };
+  bySubcategory: Share<'subcategory', Subcategory>[] | null;
+  byCategory: Share<'category', Category>[];
+  outfitPotential: { possible: number; saved: number; looks: number };
+  closetInUse: { inOutfits: number; total: number; percent: number };
+  mostStyled: { item: Item; outfits: number; looks: number } | null;
+  palette: { neutralPercent: number; top: Color[] };
+  wishlist: { count: number; topSite: string | null };
+};
+
+export type WeatherCondition = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog' | 'storm';
+
+// GET /weather (02 §8.11). Always Celsius; `place` is null when the browser's location was used.
+export type Weather = {
+  tempC: number;
+  condition: WeatherCondition;
+  message: string;
+  place: string | null;
 };

@@ -1,16 +1,13 @@
 import { z } from 'zod';
+import { nameRule, usernameRule } from '@/lib/profile-rules';
 
 // The same rules as the server's auth.schema.ts (03 §6.1).
 
 const encoder = new TextEncoder();
 
 export const signupSchema = z.object({
-  name: z.string().trim().min(1, 'Enter your name.').max(60, 'Use at most 60 characters.'),
-  username: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^[a-z0-9_.]{3,24}$/, 'Use 3–24 characters: a–z, 0–9, _ or .'),
+  name: nameRule,
+  username: usernameRule,
   email: z
     .string()
     .trim()

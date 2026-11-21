@@ -54,6 +54,7 @@ client/
 │   │   ├── accent.ts             accent colour table (§7) + applyAccent()
 │   │   ├── categories.ts         the 4 category slugs in tab order + labels (Tops / Top…)
 │   │   ├── use-online.ts         online/offline hook (offline screen, session check)
+│   │   ├── profile-rules.ts      name/username Zod rules (signup and the Settings profile form)
 │   │   └── utils.ts              cn() etc. (shadcn)
 │   ├── components/
 │   │   ├── ui/                   shadcn components (button, sheet, dialog, input, switch, select, tabs…)
@@ -76,7 +77,7 @@ client/
 │   │   └── InfiniteSentinel.tsx  loads the next page when scrolled into view
 │   ├── features/
 │   │   ├── auth/                 LoginPage, SignupPage, auth.api.ts, auth.store.ts, schemas.ts
-│   │   ├── profile/              ProfileHeader (cover card, avatar, icons, stats), me.api.ts
+│   │   ├── profile/              ProfileHeader (cover card, avatar, icons, stats), me.api.ts (profile, photos, settings, account delete), useAccent.ts
 │   │   ├── closet/               ClosetPage (Home), CategoryTabs, FilterSheet, ItemDetailSheet, items.api.ts, lookups.api.ts, filters.store.ts
 │   │   ├── upload/               UploadFlow (category → photo → preview → save), useBackgroundRemoval.ts, upload.store.ts
 │   │   ├── subcategories/        SubcategoryPicker, ManageSubcategories, subcategories.api.ts
@@ -85,9 +86,9 @@ client/
 │   │   ├── looks/                LookbooksPage, AddLookFlow, LookDetailSheet, TagPicker, use-tags.ts, looks.api.ts
 │   │   ├── wishlist/             WishlistPage, AddLinkForm, wishlist.api.ts
 │   │   ├── liked/                LikedPage (Clothes | Outfits)
-│   │   ├── stats/                StatsPage, ColorDonut, Bars, stats.api.ts
-│   │   ├── weather/              WeatherPill, WeatherCard, useWeather.ts
-│   │   └── settings/             SettingsPage, AccentPicker, WeatherSettings, DeleteAccountDialog
+│   │   ├── stats/                StatsPage, ColorDonut, Bars, ChartTip, stats.api.ts
+│   │   ├── weather/              WeatherPill, WeatherCard, WeatherIcon, conditions.ts, useWeather.ts
+│   │   └── settings/             SettingsPage, ProfileSettings, AccentPicker, WeatherSettings, DeleteAccountDialog
 │   ├── styles/
 │   │   └── globals.css           Tailwind + CSS variables (§7)
 │   └── vite-env.d.ts
@@ -100,7 +101,7 @@ client/
 
 Rules:
 - A feature folder owns its pages, components, `*.api.ts` (query/mutation hooks) and stores.
-- Features may import from `components/`, `lib/` and other features' **api hooks**, never another feature's internals. The one exception is the two detail sheets other pages open: `closet/ItemDetailSheet` and `outfits/OutfitDetailSheet`.
+- Features may import from `components/`, `lib/` and other features' **api hooks**, never another feature's internals. The exceptions are the pieces other pages show as they are: the two detail sheets (`closet/ItemDetailSheet`, `outfits/OutfitDetailSheet`), `profile/ProfileHeader` (Home), `weather/WeatherPill` (the cover) and `weather/WeatherCard` (Outfits), and `subcategories/ManageSubcategories` (Settings).
 - All server calls go through `lib/api.ts`. Components never call Axios directly; they use the feature's hooks.
 
 ---
@@ -237,7 +238,8 @@ The prototype is the visual reference. These are the rules to keep.
 
 ### 6.5 Outfits
 - `PageHeader`: "My outfits" left, **Create outfit** button right; the count below.
-- **WeatherCard** under the header: icon, temperature, condition, place, what-to-wear message.
+- **WeatherCard** under the header (below the count line, as in the prototype): icon, temperature, condition, place, what-to-wear message.
+  While loading: "Getting today's weather…"; no location and no city: "Add your city in Settings to see today's weather here." (link); a failed load: "Couldn't load the weather right now. Try again".
 - Grid of **OutfitFigure** cards: stacked top → bottom → shoes, the top **slightly** overlapping the bottom, accessories as small circles on the right, **heart top-left**. No name, no date.
 - **OutfitDetailSheet:** the figure, the list of pieces (thumbnail, subcategory, category), and three equal buttons in one row: **Favourite · Edit · Delete** (Delete = red text, with a confirm box inside the sheet: "Delete this outfit? Your clothes stay in your closet.").
 - Up to 4 accessory circles on a card, then a "+N" circle. The count line ("3 saved outfits. Pick one for today.") is hidden when there are none.
@@ -300,14 +302,20 @@ The prototype is the visual reference. These are the rules to keep.
   - Most styled (tap → ItemDetailSheet).
   - Your palette (neutrals %, top 3 colours).
   - Wishlist summary.
-- Data: `GET /stats?category=`.
+- Data: `GET /stats?category=`. The last answer stays on screen while another chip loads.
+- Charts are plain SVG/CSS (no chart library). Slices and bars show a tooltip on hover or tap ("Navy: 3 items (25%)").
+- Most styled reads "Navy top" (colour + category) and "In 3 outfits and 1 look". The palette card says "Mostly neutrals (N%). One bold piece would add range." at 60% or more, else "A good mix: N% neutrals, the rest colour.".
+- "See them" opens Home on All with only the *not in any outfit* filter on.
 
 ### 6.11 Settings
-- **Profile:** name, username, change/remove profile photo, change/remove cover photo (each an upload of kind `avatar`/`cover`).
+- Groups in this order: Profile, Appearance, Weather, Subcategories, Account (the prototype had Appearance first).
+- **Profile:** name and @username with **Edit** (a sheet: name + username, `USERNAME_TAKEN` under the field); profile photo and cover photo rows, each with **Add/Change** and **Remove** (each an upload of kind `avatar`/`cover`, with a progress bar).
+  The avatar is the photo's centre square at 512 px; the cover keeps its shape (max 1600 px). Both are WebP-compressed. Remove has no confirm (a photo can be added again).
 - **Appearance:** accent colour swatches (black, sage, dusty blue, clay, **plum = default**). Applied instantly.
-- **Weather:** "Use my location" switch, backup city (saved with Enter or blur; `VALIDATION_ERROR` → "City not found"), °C/°F.
+- **Weather:** "Use my location" switch, backup city (saved with Enter or blur; empty clears it; `VALIDATION_ERROR` → "City not found"; the field then shows the geocoder's spelling; toast "City set to Pune" / "City cleared"), °C/°F. The switch and unit change at once.
 - **Subcategories:** per category, chips with item counts; tap → rename/delete sheet (`SUBCATEGORY_IN_USE` → "still has N items…"); "+ Add".
-- **Account:** Log out; **Delete account** dialog that requires typing `DELETE`.
+  As in the prototype, delete has no extra confirm (only an empty subcategory can be deleted); one with items shows the "still has N items" box without calling the server.
+- **Account:** Log out; **Delete account** sheet that requires typing `DELETE` (the button stays disabled until then). Success ends the session, goes to `/login` and toasts "Your account was deleted."
 
 ---
 
@@ -335,7 +343,8 @@ The prototype is the visual reference. These are the rules to keep.
 
 ## 8. Weather (`features/weather/useWeather.ts`)
 
-1. If `settings.useLocation` is on: ask `navigator.geolocation` **once per session** (5 s timeout).
+1. If `settings.useLocation` is on: ask `navigator.geolocation` **once per session** (5 s timeout; a permission prompt left unanswered counts as a refusal after 15 s).
+   The answer is cached until logout, so turning the switch off and on again doesn't ask twice.
    On success → `GET /weather?lat&lon` (coordinates rounded to 2 decimals).
 2. If location is off, denied or fails → `GET /weather` (uses the saved city).
 3. If there's no city either → the pill is hidden, and the WeatherCard says "Add your city in Settings".

@@ -63,3 +63,8 @@ export function activeFilterCount(f: Filters) {
     (f.sort === 'oldest' ? 1 : 0)
   );
 }
+
+// "See them" on the stats page: all clothes that aren't in any outfit.
+export function showUnused() {
+  useFiltersStore.setState({ tab: 'all', ...NONE, unused: true });
+}

@@ -1,5 +1,6 @@
 import { ChartNoAxesColumn, Image, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router';
+import { WeatherPill } from '@/features/weather/WeatherPill';
 import { useMe } from './me.api';
 
 const QUICK: { to: string; label: string; icon: LucideIcon }[] = [
@@ -21,8 +22,7 @@ const initials = (name: string) =>
     .join('')
     .toUpperCase() || '?';
 
-// Cover card, overlapping name card, avatar, icon buttons and the 5 counts (03 §6.2).
-// The weather pill joins the cover in phase 9.
+// Cover card with the weather pill, overlapping name card, avatar, icon buttons and the 5 counts (03 §6.2).
 export function ProfileHeader() {
   const me = useMe().data;
   if (!me)
@@ -44,6 +44,7 @@ export function ProfileHeader() {
       >
         {me.cover && <img src={me.cover.url} alt="" className="size-full object-cover" />}
       </div>
+      <WeatherPill />
 
       <div className="relative mx-3 -mt-[34px] rounded-[20px] border border-border bg-background px-3.5 pt-[50px] pb-1 shadow-[0_1px_2px_rgba(22,22,22,.05),0_10px_28px_rgba(22,22,22,.08)] md:mx-7">
         <div className="absolute -top-11 left-3.5 grid size-[86px] place-items-center overflow-hidden rounded-full border-4 border-background bg-accent text-[30px] font-semibold text-accent-foreground shadow-[0_4px_14px_rgba(22,22,22,.14)]">

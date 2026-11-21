@@ -5,13 +5,13 @@ import { EmptyState } from '@/components/EmptyState';
 import { OutfitGrid, OutfitGridSkeleton } from '@/components/OutfitGrid';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
+import { WeatherCard } from '@/features/weather/WeatherCard';
 import type { Outfit } from '@/lib/api-types';
 import { toastError } from '@/lib/errors';
 import { OutfitDetailSheet } from './OutfitDetailSheet';
 import { useFavouriteOutfit, useOutfits } from './outfits.api';
 
-// "My outfits": header, the count, then the grid of outfit figures (03 §6.5).
-// The weather card goes above the grid in phase 9.
+// "My outfits": header, the count, the weather card (as in the prototype), then the grid of outfit figures (03 §6.5).
 export function OutfitsPage() {
   const list = useOutfits();
   const favourite = useFavouriteOutfit();
@@ -39,6 +39,7 @@ export function OutfitsPage() {
           {total} saved {total === 1 ? 'outfit' : 'outfits'}. Pick one for today.
         </p>
       )}
+      <WeatherCard />
 
       {list.isPending ? (
         <OutfitGridSkeleton />
